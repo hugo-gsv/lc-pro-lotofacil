@@ -101,33 +101,41 @@ for c, dez in hist:
 
 
 # ---------- Histórico unificado (tabela + gráfico ASCII numa mesma tabela) ----------
-st.markdown(f'<div class="lc-section">Histórico — Gráfico {graf}</div>',
-            unsafe_allow_html=True)
-
 CHART_W = 31; CHART_CENTER = CHART_W // 2
+
+# Define qual variável o gráfico mostra. Em modo Linha x Coluna a única
+# faz sentido é Soma (porque envolve linha+coluna juntos). Nos modos
+# simples, o radio escolhe entre SPQ e CSN.
 if tipo == "Linha x Coluna":
-    vmin, vmax = 120, 270
+    GRAF_NAME = "Soma"
+    GRAF_MIN, GRAF_MAX = 120, 270
     var_caption = "Soma das Dezenas — cada tracinho = 5 unidades (range 120..270)"
 elif graf == "SPQ":
-    vmin, vmax = 30, 60
+    GRAF_NAME = "SPQ"
+    GRAF_MIN, GRAF_MAX = 30, 60
     var_caption = "SPQ — cada tracinho = 1 unidade (range 30..60)"
 else:
-    vmin, vmax = 10, 629
+    GRAF_NAME = "CSN"
+    GRAF_MIN, GRAF_MAX = 10, 629
     var_caption = "CSN — cada tracinho = 20 unidades (range 10..629)"
 
+st.markdown(f'<div class="lc-section">Histórico — Gráfico {GRAF_NAME}</div>',
+            unsafe_allow_html=True)
 
-def make_bar(v: int) -> str:
-    pos = max(0, min(CHART_W - 1,
-                      int(round((v - vmin) / max(vmax - vmin, 1) * (CHART_W - 1)))))
-    out = ""
+
+def make_bar(v: int, vmin: int, vmax: int) -> str:
+    """Gera barra ASCII de 31 colunas com '!' no centro e 'x' na posição de v."""
+    pos = int(round((v - vmin) / max(vmax - vmin, 1) * (CHART_W - 1)))
+    pos = max(0, min(CHART_W - 1, pos))
+    out = []
     for i in range(CHART_W):
         if i == pos:
-            out += '<span class="x">x</span>'
+            out.append('<span class="x">x</span>')
         elif i == CHART_CENTER:
-            out += '<span class="center">!</span>'
+            out.append('<span class="center">!</span>')
         else:
-            out += "_"
-    return out
+            out.append("_")
+    return "".join(out)
 
 
 html = ['<div class="lc-history-wrap"><table class="lc-history">']
@@ -137,7 +145,6 @@ if tipo == "Linha x Coluna":
         '<th>Conc</th><th>Formato</th><th>Coluna</th>'
         '<th style="text-align:right">CSN</th>'
         '<th style="text-align:right">SPQ</th>'
-        '<th style="text-align:right">Soma</th>'
         '<th>Gráfico</th>'
         '</tr></thead><tbody>'
     )
@@ -161,19 +168,18 @@ for row in linhas_data:
             f'<td class="lc-fmt">{row["Coluna"]}</td>'
             f'<td class="lc-num">{row["CSN"]}</td>'
             f'<td class="lc-num">{row["SPQ"]}</td>'
-            f'<td class="lc-num">{row["Soma"]}</td>'
-            f'<td class="lc-bar">{make_bar(v)}</td>'
+            f'<td class="lc-bar">{make_bar(v, GRAF_MIN, GRAF_MAX)}</td>'
             f'</tr>'
         )
     else:
-        v = row["SPQ"] if graf == "SPQ" else row["CSN"]
+        v = row["SPQ"] if GRAF_NAME == "SPQ" else row["CSN"]
         html.append(
             f'<tr>'
             f'<td class="lc-num">{row["Conc"]}</td>'
             f'<td class="lc-fmt">{row["Formato"]}</td>'
             f'<td class="lc-num">{row["CSN"]}</td>'
             f'<td class="lc-num">{row["SPQ"]}</td>'
-            f'<td class="lc-bar">{make_bar(v)}</td>'
+            f'<td class="lc-bar">{make_bar(v, GRAF_MIN, GRAF_MAX)}</td>'
             f'</tr>'
         )
 html.append("</tbody></table></div>")
