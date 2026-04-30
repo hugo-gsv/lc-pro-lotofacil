@@ -16,7 +16,7 @@ from typing import Iterable
 #  Constantes — geometria 5×5 da Lotofácil
 # ============================================================================
 MODAIS: set[int] = {1, 2, 4, 6, 8, 9, 11, 13, 15, 17, 18, 20, 22, 24, 25}
-"""15 dezenas-modal (Vid117 do canal Mais Chances Loterias).
+"""15 dezenas-modal (estratégia "Modais" do autor).
 
 Propriedades:
 - 8 pares + 7 ímpares

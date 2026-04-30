@@ -301,42 +301,33 @@ def inject_css() -> None:
     )
 
 
-def hero(title: str, subtitle: str = "", brand: str = "MAIS CHANCES LOTERIAS") -> None:
-    st.markdown(
-        f"""
-        <div class="lc-hero">
-            <div class="lc-brand">{brand}</div>
-            <h1>{title}</h1>
-            <p>{subtitle}</p>
-        </div>
-        """,
-        unsafe_allow_html=True,
+def hero(title: str, subtitle: str = "", brand: str = "") -> None:
+    brand_html = f'<div class="lc-brand">{brand}</div>' if brand else ""
+    html = (
+        f'<div class="lc-hero">{brand_html}'
+        f'<h1>{title}</h1><p>{subtitle}</p></div>'
     )
+    st.markdown(html, unsafe_allow_html=True)
 
 
 def page_header(icon: str, title: str, subtitle: str = "") -> None:
-    st.markdown(
-        f"""
-        <div class="lc-pgheader">
-            <div class="lc-icon">{icon}</div>
-            <div>
-                <h2>{title}</h2>
-                <p>{subtitle}</p>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
+    html = (
+        f'<div class="lc-pgheader">'
+        f'<div class="lc-icon">{icon}</div>'
+        f'<div><h2>{title}</h2><p>{subtitle}</p></div>'
+        f'</div>'
     )
+    st.markdown(html, unsafe_allow_html=True)
 
 
 def metric_card(label: str, value: str, sub: str = "") -> str:
-    return f"""
-        <div class="lc-metric">
-            <div class="lc-metric-label">{label}</div>
-            <div class="lc-metric-value">{value}</div>
-            <div class="lc-metric-sub">{sub}</div>
-        </div>
-    """
+    return (
+        f'<div class="lc-metric">'
+        f'<div class="lc-metric-label">{label}</div>'
+        f'<div class="lc-metric-value">{value}</div>'
+        f'<div class="lc-metric-sub">{sub}</div>'
+        f'</div>'
+    )
 
 
 def dezenas_balls(dez: list[int], destacar: set[int] | None = None) -> None:
@@ -351,31 +342,14 @@ def dezenas_balls(dez: list[int], destacar: set[int] | None = None) -> None:
 
 
 def tool_card(icon: str, title: str, desc: str) -> str:
-    return f"""
-        <div class="lc-tool">
-            <div class="lc-tool-icon">{icon}</div>
-            <h3>{title}</h3>
-            <p>{desc}</p>
-        </div>
-    """
+    return (
+        f'<div class="lc-tool">'
+        f'<div class="lc-tool-icon">{icon}</div>'
+        f'<h3>{title}</h3><p>{desc}</p>'
+        f'</div>'
+    )
 
 
 def footer(version: str = "v1.0") -> None:
-    st.markdown(
-        f"""
-        <div class="lc-footer">
-            <div>
-                Mais Chances Loterias • LC Pro {version}<br>
-                <span style="font-size:11px;opacity:.7;">Fórmulas SPQ/CSN validadas 9/9 · MODAIS 100%</span>
-            </div>
-            <div>
-                <a href="https://github.com/hugo-gsv/lc-pro-lotofacil" target="_blank">GitHub</a>
-                &nbsp;•&nbsp;
-                <a href="https://maischancesloterias.com.br" target="_blank">Site oficial</a>
-                &nbsp;•&nbsp;
-                <a href="https://www.youtube.com/@maischancesloterias" target="_blank">YouTube</a>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    """No-op: rodapé removido a pedido do usuário."""
+    return

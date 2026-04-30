@@ -14,7 +14,7 @@ from lib.ui import (
 
 # ---------- Page config ----------
 st.set_page_config(
-    page_title="LC Pro Lotofácil — Mais Chances Loterias",
+    page_title="LC Pro Lotofácil",
     page_icon="🎯",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -26,6 +26,7 @@ inject_css()
 hero(
     "LC Pro Lotofácil",
     "Sistema profissional de análise estatística e geração de jogos.",
+    brand="",
 )
 
 
