@@ -1,10 +1,22 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
-const SUPA_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const SUPA_KEY = process.env.SUPABASE_SERVICE_KEY!;
+let _client: SupabaseClient | null = null;
 
-export const supabase = createClient(SUPA_URL, SUPA_KEY, {
-  auth: { persistSession: false },
+function client(): SupabaseClient {
+  if (_client) return _client;
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_KEY;
+  if (!url || !key) {
+    throw new Error("Supabase env vars não configuradas");
+  }
+  _client = createClient(url, key, { auth: { persistSession: false } });
+  return _client;
+}
+
+export const supabase = new Proxy({} as SupabaseClient, {
+  get(_t, p) {
+    return (client() as unknown as Record<string | symbol, unknown>)[p];
+  },
 });
 
 export type JogoSalvo = {
