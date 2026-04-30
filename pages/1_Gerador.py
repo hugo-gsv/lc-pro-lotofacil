@@ -76,68 +76,87 @@ if not hist:
 
 
 # ---------- Constrói tabela + chart ----------
+# Em modo "Linha x Coluna" o app original mantém os rótulos Formato/CSN/SPQ
+# mas as células passam a mostrar: formato_linha / formato_coluna / soma.
 linhas_data = []
-prev = None
+somas: dict[str, int] = {}     # para o gráfico em "Linha x Coluna"
 for c, dez in hist:
     fl = formato_linha(dez); fc = formato_coluna(dez)
+    soma = sum(dez)
     if tipo == "Linhas":
-        fmt = fl; sp = spq(fl); cn = csn(fl)
+        col_fmt, col_csn, col_spq = fl, str(csn(fl)), str(spq(fl))
     elif tipo == "Colunas":
-        fmt = fc; sp = spq(fc); cn = csn(fc)
-    else:
-        fmt = f"{fl}-{fc}"; sp = spq(fc); cn = csn(fc)
-    linhas_data.append({
-        "Conc": f"{c:04d}",
-        "Formato": fmt,
-        "CSN": cn,
-        "SPQ": sp,
-        "Soma": sum(dez),
-    })
+        col_fmt, col_csn, col_spq = fc, str(csn(fc)), str(spq(fc))
+    else:  # Linha x Coluna
+        col_fmt, col_csn, col_spq = fl, fc, str(soma)
+    cstr = f"{c:04d}"
+    linhas_data.append({"Conc": cstr, "Formato": col_fmt,
+                        "CSN": col_csn, "SPQ": col_spq})
+    somas[cstr] = soma
 
 
-# ---------- Tabela + Gráfico ASCII ----------
-left, right = st.columns([2, 3], gap="medium")
+# ---------- Histórico unificado (tabela + gráfico ASCII numa mesma tabela) ----------
+st.markdown(f'<div class="lc-section">Histórico — Gráfico {graf}</div>',
+            unsafe_allow_html=True)
 
-with left:
-    st.markdown('<div class="lc-section">Histórico</div>', unsafe_allow_html=True)
-    st.dataframe(linhas_data, use_container_width=True, hide_index=True, height=420)
+CHART_W = 31; CHART_CENTER = CHART_W // 2
+if tipo == "Linha x Coluna":
+    vmin, vmax = 120, 270
+    var_caption = "Soma das Dezenas — cada tracinho = 5 unidades (range 120..270)"
+elif graf == "SPQ":
+    vmin, vmax = 30, 60
+    var_caption = "SPQ — cada tracinho = 1 unidade (range 30..60)"
+else:
+    vmin, vmax = 10, 629
+    var_caption = "CSN — cada tracinho = 20 unidades (range 10..629)"
 
-with right:
-    st.markdown(f'<div class="lc-section">Gráfico {graf}</div>', unsafe_allow_html=True)
-    CHART_W = 31; CHART_CENTER = CHART_W // 2
 
-    if tipo == "Linha x Coluna":
-        vmin, vmax = 120, 270
-        unit_label = "Soma das Dezenas — cada tracinho = 5 unidades (range 120..270)"
-    elif graf == "SPQ":
-        vmin, vmax = 30, 60
-        unit_label = "SPQ — cada tracinho = 1 unidade (range 30..60)"
-    else:
-        vmin, vmax = 10, 629
-        unit_label = "CSN — cada tracinho = 20 unidades (range 10..629)"
-
-    chart_html = f'<div class="lc-chart">'
-    for row in linhas_data:
-        if tipo == "Linha x Coluna":
-            v = row["Soma"]
-        elif graf == "SPQ":
-            v = row["SPQ"]
+def make_bar(v: int) -> str:
+    pos = max(0, min(CHART_W - 1,
+                      int(round((v - vmin) / max(vmax - vmin, 1) * (CHART_W - 1)))))
+    out = ""
+    for i in range(CHART_W):
+        if i == pos:
+            out += '<span class="x">x</span>'
+        elif i == CHART_CENTER:
+            out += '<span class="center">!</span>'
         else:
-            v = row["CSN"]
-        pos = max(0, min(CHART_W - 1,
-                          int(round((v - vmin) / max(vmax - vmin, 1) * (CHART_W - 1)))))
-        line = ""
-        for i in range(CHART_W):
-            if i == pos:
-                line += '<span class="x">x</span>'
-            elif i == CHART_CENTER:
-                line += '<span class="center">!</span>'
-            else:
-                line += "_"
-        chart_html += f'<span style="opacity:.7">{row["Conc"]}</span> {line}  <span style="opacity:.6">→{v}</span>\n'
-    chart_html += "</div>"
-    st.markdown(chart_html, unsafe_allow_html=True)
-    st.caption(unit_label)
+            out += "_"
+    return out
+
+
+html = ['<div class="lc-history-wrap"><table class="lc-history">']
+html.append(
+    '<thead><tr>'
+    '<th>Conc</th><th>Formato</th><th style="text-align:right">CSN</th>'
+    '<th style="text-align:right">SPQ</th>'
+    '<th style="background:#1A2A3A;color:#B8E8F2">Gráfico</th>'
+    '<th style="background:#1A2A3A;color:#B8E8F2;text-align:right">Valor</th>'
+    '</tr></thead><tbody>'
+)
+for row in linhas_data:
+    if tipo == "Linha x Coluna":
+        v = somas[row["Conc"]]
+    elif graf == "SPQ":
+        v = int(row["SPQ"])
+    else:
+        v = int(row["CSN"])
+    # CSN/SPQ são string (em Linha x Coluna são formatos, não números) — alinha conforme conteúdo
+    csn_class = "lc-fmt" if tipo == "Linha x Coluna" else "lc-num"
+    spq_class = "lc-num"
+    html.append(
+        f'<tr>'
+        f'<td class="lc-num">{row["Conc"]}</td>'
+        f'<td class="lc-fmt">{row["Formato"]}</td>'
+        f'<td class="{csn_class}">{row["CSN"]}</td>'
+        f'<td class="{spq_class}">{row["SPQ"]}</td>'
+        f'<td class="lc-bar">{make_bar(v)}</td>'
+        f'<td class="lc-val">→{v}</td>'
+        f'</tr>'
+    )
+html.append("</tbody></table></div>")
+st.markdown("".join(html), unsafe_allow_html=True)
+st.caption(var_caption)
 
 
 st.divider()
@@ -217,12 +236,18 @@ st.markdown('<div class="lc-section">Geração das Combinações</div>',
             unsafe_allow_html=True)
 
 with st.container(border=True):
-    g1, g2, g3, g4 = st.columns([1, 1, 2, 1.5])
-    soma_min = g1.number_input("Soma mín (120..270)", value=120, min_value=120, max_value=270)
-    soma_max = g2.number_input("Soma máx (120..270)", value=270, min_value=120, max_value=270)
+    st.caption("Soma das dezenas — intervalo permitido: 120 a 270")
+    g1, g2, g3, g4 = st.columns([1, 1, 3, 1.3])
+    soma_min = g1.number_input("Soma mín", value=120,
+                                min_value=120, max_value=270,
+                                label_visibility="visible")
+    soma_max = g2.number_input("Soma máx", value=270,
+                                min_value=120, max_value=270,
+                                label_visibility="visible")
     nome_arq = g3.text_input("Nome do arquivo", value=f"{int(target)}A.txt")
     with g4:
-        st.write(""); st.write("")
+        st.write("")
+        st.write("")
         gerar = st.button("🎯 Gerar", type="primary", use_container_width=True)
 
 

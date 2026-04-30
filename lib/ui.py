@@ -118,14 +118,20 @@ def inject_css() -> None:
             font-size: 14px;
         }}
 
-        /* Metrics card */
+        /* Metrics card — todos com mesma altura, label sem quebra */
         .lc-metric {{
             background: white;
             border: 1px solid var(--border);
             border-radius: 14px;
-            padding: 18px 22px;
+            padding: 16px 20px;
             box-shadow: 0 2px 8px rgba(20,42,58,.04);
             transition: transform .15s, box-shadow .15s;
+            height: 100%;
+            min-height: 110px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            box-sizing: border-box;
         }}
         .lc-metric:hover {{
             transform: translateY(-2px);
@@ -133,22 +139,49 @@ def inject_css() -> None:
         }}
         .lc-metric-label {{
             text-transform: uppercase;
-            font-size: 11px;
-            letter-spacing: 1.2px;
+            font-size: 10px;
+            letter-spacing: 1px;
             color: #5C7080;
-            font-weight: 600;
+            font-weight: 700;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }}
         .lc-metric-value {{
-            font-size: 28px;
+            font-size: 22px;
             font-weight: 800;
             color: var(--ink);
-            line-height: 1.2;
+            line-height: 1.15;
             margin-top: 4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }}
         .lc-metric-sub {{
-            font-size: 12px;
+            font-size: 11px;
             color: #5C7080;
-            margin-top: 2px;
+            margin-top: 4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }}
+
+        /* Cards (.lc-metric, .lc-tool) preenchem altura igual em columns */
+        [data-testid="stHorizontalBlock"]:has(.lc-metric),
+        [data-testid="stHorizontalBlock"]:has(.lc-tool) {{
+            align-items: stretch;
+        }}
+        [data-testid="stHorizontalBlock"]:has(.lc-metric) [data-testid="column"] > div,
+        [data-testid="stHorizontalBlock"]:has(.lc-tool) [data-testid="column"] > div {{
+            height: 100%;
+        }}
+
+        /* Dataframe — altura fixa para casar com o gráfico */
+        [data-testid="stDataFrame"] {{
+            height: 480px !important;
+        }}
+        [data-testid="stDataFrame"] > div {{
+            height: 100% !important;
         }}
 
         /* Lottery balls */
@@ -182,7 +215,7 @@ def inject_css() -> None:
             box-shadow: 0 2px 6px rgba(20,42,58,.08), inset -3px -3px 6px rgba(0,0,0,.08);
         }}
 
-        /* Tool card */
+        /* Tool card — fixa altura para alinhar */
         .lc-tool {{
             background: white;
             border: 1px solid var(--border);
@@ -190,6 +223,10 @@ def inject_css() -> None:
             padding: 24px;
             transition: transform .2s, box-shadow .2s, border-color .2s;
             height: 100%;
+            min-height: 220px;
+            display: flex;
+            flex-direction: column;
+            box-sizing: border-box;
         }}
         .lc-tool:hover {{
             transform: translateY(-4px);
@@ -276,17 +313,79 @@ def inject_css() -> None:
             border-radius: 10px !important;
         }}
 
-        /* ASCII chart */
-        .lc-chart {{
+        /* Histórico unificado — uma tabela com tabular + gráfico ASCII na mesma row */
+        .lc-history {{
+            width: 100%;
+            border-collapse: collapse;
+            border-radius: 14px;
+            overflow: hidden;
+            border: 1px solid var(--border);
+            background: white;
+            font-size: 13px;
+        }}
+        .lc-history thead th {{
+            background: #F5FBFC;
+            color: var(--ink);
+            font-weight: 700;
+            text-transform: uppercase;
+            font-size: 11px;
+            letter-spacing: .8px;
+            padding: 10px 12px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }}
+        .lc-history tbody td {{
+            padding: 6px 12px;
+            border-bottom: 1px solid #F0F6F8;
+            color: var(--ink);
+            white-space: nowrap;
+        }}
+        .lc-history tbody tr:last-child td {{
+            border-bottom: none;
+        }}
+        .lc-history tbody tr:hover td {{
+            background: #F8FCFD;
+        }}
+        .lc-history td.lc-num {{
+            font-variant-numeric: tabular-nums;
+            font-weight: 600;
+            text-align: right;
+        }}
+        .lc-history td.lc-fmt {{
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 600;
+            color: var(--primary-dark);
+        }}
+        .lc-history td.lc-bar {{
             background: var(--ink);
             color: #B8E8F2;
             font-family: 'JetBrains Mono', monospace;
-            font-size: 13px;
-            padding: 16px;
-            border-radius: 12px;
-            line-height: 1.4;
+            font-size: 12px;
+            padding: 6px 14px;
             white-space: pre;
-            overflow-x: auto;
+        }}
+        .lc-history td.lc-bar .x {{
+            color: #FF6B35; font-weight: 700;
+        }}
+        .lc-history td.lc-bar .center {{
+            color: var(--primary);
+        }}
+        .lc-history td.lc-val {{
+            background: var(--ink);
+            color: #B8E8F2;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            text-align: right;
+            padding: 6px 14px 6px 0;
+        }}
+        .lc-history-wrap {{
+            max-height: 540px;
+            overflow-y: auto;
+            border-radius: 14px;
+            border: 1px solid var(--border);
+        }}
+        .lc-history-wrap table {{
+            border: none;
         }}
         .lc-chart .x {{ color: var(--accent); font-weight: 700; }}
         .lc-chart .center {{ color: var(--primary); }}

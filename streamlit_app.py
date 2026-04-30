@@ -49,20 +49,20 @@ fl = formato_linha(dez); fc = formato_coluna(dez)
 st.markdown('<div class="lc-section">Último concurso oficial</div>',
             unsafe_allow_html=True)
 
-c1, c2, c3, c4 = st.columns(4)
+c1, c2, c3, c4 = st.columns(4, gap="small")
 with c1:
     st.markdown(metric_card("Concurso", f"#{latest['numero']}", "Oficial Caixa"),
                 unsafe_allow_html=True)
 with c2:
-    st.markdown(metric_card("Data do sorteio", latest["dataApuracao"], ""),
+    st.markdown(metric_card("Data", latest["dataApuracao"], "Sorteio"),
                 unsafe_allow_html=True)
 with c3:
-    st.markdown(metric_card("SPQ (linha / coluna)", f"{spq(fl)} / {spq(fc)}",
-                            f"Formato {fl} / {fc}"),
+    st.markdown(metric_card("SPQ L / C", f"{spq(fl)} / {spq(fc)}",
+                            f"Fmt {fl} / {fc}"),
                 unsafe_allow_html=True)
 with c4:
-    st.markdown(metric_card("CSN (linha / coluna)", f"{csn(fl)} / {csn(fc)}",
-                            "Rank entre 651 formatos"),
+    st.markdown(metric_card("CSN L / C", f"{csn(fl)} / {csn(fc)}",
+                            "Rank entre 651"),
                 unsafe_allow_html=True)
 
 st.write("")
