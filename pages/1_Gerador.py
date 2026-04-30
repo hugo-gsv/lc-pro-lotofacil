@@ -153,7 +153,8 @@ html.append(
     '<col style="width:10%">'    # Coluna
     '<col style="width:8%">'     # CSN
     '<col style="width:8%">'     # SPQ
-    '<col style="width:53%">'    # Gráfico
+    '<col style="width:8%">'     # Soma
+    '<col style="width:45%">'    # Gráfico
     '</colgroup>'
     '<thead><tr>'
     '<th>Concurso</th>'
@@ -161,13 +162,15 @@ html.append(
     '<th>Coluna</th>'
     '<th>CSN</th>'
     '<th>SPQ</th>'
+    '<th>Soma</th>'
     '<th>Gráfico</th>'
     '</tr></thead><tbody>'
 )
 
 for row in linhas_data:
+    soma_v = somas[row["Conc"]]
     if tipo == "Linha x Coluna":
-        v = somas[row["Conc"]]
+        v = soma_v
     else:
         v = row["SPQ"] if GRAF_NAME == "SPQ" else row["CSN"]
     html.append(
@@ -177,6 +180,7 @@ for row in linhas_data:
         f'<td class="lc-fmt">{row["Coluna"]}</td>'
         f'<td class="lc-num">{row["CSN"]}</td>'
         f'<td class="lc-num">{row["SPQ"]}</td>'
+        f'<td class="lc-num">{soma_v}</td>'
         f'<td class="lc-bar">{make_bar(v, GRAF_MIN, GRAF_MAX)}</td>'
         f'</tr>'
     )
