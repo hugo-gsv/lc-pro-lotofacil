@@ -223,15 +223,11 @@ with fa1:
     formatos = st.session_state.formatos_aceitos
     if not formatos:
         st.info("Defina SPQ/CSN e clique em **Mostrar formatos** acima.")
-        sel = None
     else:
         st.caption(
             f"{len(formatos)} formato(s) no intervalo — clique numa linha para selecionar"
         )
-        # Constrói dataframe com Formato, SPQ, CSN
-        rows_data = [
-            {"Formato": f, "SPQ": spq(f), "CSN": csn(f)} for f in formatos
-        ]
+        rows_data = [{"Formato": f} for f in formatos]
         event = st.dataframe(
             rows_data,
             use_container_width=True,
@@ -241,20 +237,11 @@ with fa1:
             selection_mode="single-row",
             key="formatos_table",
             column_config={
-                "Formato": st.column_config.TextColumn(
-                    "Formato", width="medium",
-                ),
-                "SPQ": st.column_config.NumberColumn(
-                    "SPQ", width="small", format="%d",
-                ),
-                "CSN": st.column_config.NumberColumn(
-                    "CSN", width="small", format="%d",
-                ),
+                "Formato": st.column_config.TextColumn("Formato"),
             },
         )
         if event.selection.rows:
             st.session_state.formato_selecionado = formatos[event.selection.rows[0]]
-        # Se nada selecionado, mantém valor anterior pra não perder ao re-render
 
 sel = st.session_state.formato_selecionado
 
@@ -267,33 +254,73 @@ with fa2:
     colunas = st.session_state.colunas_inclusas
     max_rows = max(len(linhas), len(colunas), 1)
 
-    # Tabela HTML estilo lc-history
-    html = ['<div class="lc-history-wrap"><table class="lc-history">']
-    html.append(
-        '<colgroup>'
-        '<col style="width:50%"><col style="width:50%">'
-        '</colgroup>'
-        '<thead><tr>'
-        '<th>Linhas</th><th>Colunas</th>'
-        '</tr></thead><tbody>'
+    # Cabeçalho
+    h1, h2 = st.columns(2, gap="small")
+    h1.markdown(
+        '<div style="text-align:center;font-weight:700;text-transform:uppercase;'
+        'font-size:11px;letter-spacing:1.2px;color:#0095B6;'
+        'padding:10px 0;border-bottom:1px solid #DDE8EC;'
+        'background:linear-gradient(180deg,#FBFDFE,#F4F8FA);'
+        'border-radius:14px 0 0 0;">Linhas</div>',
+        unsafe_allow_html=True,
     )
-    for i in range(max_rows):
-        l = linhas[i] if i < len(linhas) else ""
-        c = colunas[i] if i < len(colunas) else ""
-        html.append(
-            '<tr>'
-            f'<td class="lc-fmt">{l or "—"}</td>'
-            f'<td class="lc-fmt">{c or "—"}</td>'
-            '</tr>'
-        )
-    html.append('</tbody></table></div>')
-    st.markdown("".join(html), unsafe_allow_html=True)
+    h2.markdown(
+        '<div style="text-align:center;font-weight:700;text-transform:uppercase;'
+        'font-size:11px;letter-spacing:1.2px;color:#0095B6;'
+        'padding:10px 0;border-bottom:1px solid #DDE8EC;'
+        'background:linear-gradient(180deg,#FBFDFE,#F4F8FA);'
+        'border-radius:0 14px 0 0;">Colunas</div>',
+        unsafe_allow_html=True,
+    )
 
-    # Botões de adicionar (apenas se há formato selecionado)
+    # Linhas da tabela com botão ✕ inline
+    for i in range(max_rows):
+        l = linhas[i] if i < len(linhas) else None
+        c = colunas[i] if i < len(colunas) else None
+        cl, cc = st.columns(2, gap="small")
+
+        with cl:
+            if l is not None:
+                a, b = st.columns([4, 1], gap="small")
+                a.markdown(
+                    f'<div class="lc-incluso-cell">{l}</div>',
+                    unsafe_allow_html=True,
+                )
+                if b.button("✕", key=f"rm_lin_{i}_{l}",
+                             help=f"Remover {l}",
+                             use_container_width=True):
+                    st.session_state.linhas_inclusas.remove(l)
+                    st.rerun()
+            else:
+                st.markdown(
+                    '<div class="lc-incluso-cell lc-incluso-empty">—</div>',
+                    unsafe_allow_html=True,
+                )
+
+        with cc:
+            if c is not None:
+                a, b = st.columns([4, 1], gap="small")
+                a.markdown(
+                    f'<div class="lc-incluso-cell">{c}</div>',
+                    unsafe_allow_html=True,
+                )
+                if b.button("✕", key=f"rm_col_{i}_{c}",
+                             help=f"Remover {c}",
+                             use_container_width=True):
+                    st.session_state.colunas_inclusas.remove(c)
+                    st.rerun()
+            else:
+                st.markdown(
+                    '<div class="lc-incluso-cell lc-incluso-empty">—</div>',
+                    unsafe_allow_html=True,
+                )
+
+    # Botões de adicionar
+    st.write("")
     bcols = st.columns(2, gap="small")
     with bcols[0]:
         disabled = sel is None
-        label = f"⬅︎ Adicionar a Linhas" if not sel else f"⬅︎ {sel} → Linhas"
+        label = "⬅︎ Adicionar a Linhas" if not sel else f"⬅︎ {sel} → Linhas"
         if st.button(label, use_container_width=True, type="primary",
                      disabled=disabled, key="add_linha_btn"):
             if sel and sel not in st.session_state.linhas_inclusas:
@@ -302,30 +329,13 @@ with fa2:
             st.rerun()
     with bcols[1]:
         disabled = sel is None
-        label = f"➡︎ Adicionar a Colunas" if not sel else f"➡︎ {sel} → Colunas"
+        label = "➡︎ Adicionar a Colunas" if not sel else f"➡︎ {sel} → Colunas"
         if st.button(label, use_container_width=True, type="primary",
                      disabled=disabled, key="add_coluna_btn"):
             if sel and sel not in st.session_state.colunas_inclusas:
                 st.session_state.colunas_inclusas.append(sel)
             st.session_state.formato_selecionado = None
             st.rerun()
-
-    # Linha pra remover formatos individualmente
-    rcols = st.columns(2, gap="small")
-    with rcols[0]:
-        if linhas:
-            rm_l = st.selectbox("Remover de Linhas", ["—"] + linhas,
-                                 key="rm_lin_sel", label_visibility="collapsed")
-            if rm_l and rm_l != "—":
-                st.session_state.linhas_inclusas.remove(rm_l)
-                st.rerun()
-    with rcols[1]:
-        if colunas:
-            rm_c = st.selectbox("Remover de Colunas", ["—"] + colunas,
-                                 key="rm_col_sel", label_visibility="collapsed")
-            if rm_c and rm_c != "—":
-                st.session_state.colunas_inclusas.remove(rm_c)
-                st.rerun()
 
 
 st.divider()
