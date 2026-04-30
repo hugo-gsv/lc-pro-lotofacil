@@ -223,24 +223,38 @@ with fa1:
     formatos = st.session_state.formatos_aceitos
     if not formatos:
         st.info("Defina SPQ/CSN e clique em **Mostrar formatos** acima.")
+        sel = None
     else:
-        st.caption(f"{len(formatos)} formato(s) no intervalo — clique para selecionar")
-        N_COLS = 5
-        for r0 in range(0, len(formatos), N_COLS):
-            cols_grid = st.columns(N_COLS, gap="small")
-            for c, fmt in enumerate(formatos[r0:r0+N_COLS]):
-                with cols_grid[c]:
-                    is_sel = (fmt == st.session_state.formato_selecionado)
-                    if st.button(
-                        fmt,
-                        key=f"fmt_btn_{fmt}",
-                        type="primary" if is_sel else "secondary",
-                        use_container_width=True,
-                    ):
-                        st.session_state.formato_selecionado = (
-                            None if is_sel else fmt
-                        )
-                        st.rerun()
+        st.caption(
+            f"{len(formatos)} formato(s) no intervalo — clique numa linha para selecionar"
+        )
+        # Constrói dataframe com Formato, SPQ, CSN
+        rows_data = [
+            {"Formato": f, "SPQ": spq(f), "CSN": csn(f)} for f in formatos
+        ]
+        event = st.dataframe(
+            rows_data,
+            use_container_width=True,
+            hide_index=True,
+            height=320,
+            on_select="rerun",
+            selection_mode="single-row",
+            key="formatos_table",
+            column_config={
+                "Formato": st.column_config.TextColumn(
+                    "Formato", width="medium",
+                ),
+                "SPQ": st.column_config.NumberColumn(
+                    "SPQ", width="small", format="%d",
+                ),
+                "CSN": st.column_config.NumberColumn(
+                    "CSN", width="small", format="%d",
+                ),
+            },
+        )
+        if event.selection.rows:
+            st.session_state.formato_selecionado = formatos[event.selection.rows[0]]
+        # Se nada selecionado, mantém valor anterior pra não perder ao re-render
 
 sel = st.session_state.formato_selecionado
 
