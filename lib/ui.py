@@ -446,6 +446,25 @@ def inject_css() -> None:
             box-shadow: 0 0 0 3px rgba(20,198,228,.15);
         }}
 
+        /* Células dos Inclusos (Linhas/Colunas) — fica estilo tabela */
+        .lc-incluso-cell {{
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 700;
+            color: var(--primary-dark);
+            text-align: center;
+            padding: 9px 4px;
+            background: white;
+            border-bottom: 1px solid #F2F6F8;
+            border-left: 1px solid #DDE8EC;
+            border-right: 1px solid #DDE8EC;
+            font-size: 14px;
+            letter-spacing: 1px;
+        }}
+        .lc-incluso-cell.lc-incluso-empty {{
+            color: #C8D4DA;
+            font-weight: 400;
+        }}
+
         /* === Histórico — tabela premium === */
         .lc-history-wrap {{
             max-height: 540px;
