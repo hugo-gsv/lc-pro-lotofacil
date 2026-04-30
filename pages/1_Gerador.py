@@ -215,7 +215,7 @@ with st.container(border=True):
 if "formato_selecionado" not in st.session_state:
     st.session_state.formato_selecionado = None
 
-fa1, fa2, fa3 = st.columns([2, 1, 1], gap="medium")
+fa1, fa2 = st.columns([3, 2], gap="medium")
 
 with fa1:
     st.markdown('<div class="lc-section">Formatos Aceitos</div>',
@@ -225,8 +225,7 @@ with fa1:
         st.info("Defina SPQ/CSN e clique em **Mostrar formatos** acima.")
     else:
         st.caption(f"{len(formatos)} formato(s) no intervalo — clique para selecionar")
-        # Grid de chips (4 colunas pra caber 5 dígitos numa linha)
-        N_COLS = 4
+        N_COLS = 5
         for r0 in range(0, len(formatos), N_COLS):
             cols_grid = st.columns(N_COLS, gap="small")
             for c, fmt in enumerate(formatos[r0:r0+N_COLS]):
@@ -245,47 +244,74 @@ with fa1:
 
 sel = st.session_state.formato_selecionado
 
+
+# --- Direita: Inclusas (tabela única + dois botões de adicionar) ---
 with fa2:
-    st.markdown('<div class="lc-section">Linhas Inclusas</div>',
-                unsafe_allow_html=True)
-    if sel:
-        if st.button(f"⬅︎ Adicionar **{sel}** a Linhas",
-                      use_container_width=True, type="primary"):
-            if sel not in st.session_state.linhas_inclusas:
+    st.markdown('<div class="lc-section">Inclusos</div>', unsafe_allow_html=True)
+
+    linhas = st.session_state.linhas_inclusas
+    colunas = st.session_state.colunas_inclusas
+    max_rows = max(len(linhas), len(colunas), 1)
+
+    # Tabela HTML estilo lc-history
+    html = ['<div class="lc-history-wrap"><table class="lc-history">']
+    html.append(
+        '<colgroup>'
+        '<col style="width:50%"><col style="width:50%">'
+        '</colgroup>'
+        '<thead><tr>'
+        '<th>Linhas</th><th>Colunas</th>'
+        '</tr></thead><tbody>'
+    )
+    for i in range(max_rows):
+        l = linhas[i] if i < len(linhas) else ""
+        c = colunas[i] if i < len(colunas) else ""
+        html.append(
+            '<tr>'
+            f'<td class="lc-fmt">{l or "—"}</td>'
+            f'<td class="lc-fmt">{c or "—"}</td>'
+            '</tr>'
+        )
+    html.append('</tbody></table></div>')
+    st.markdown("".join(html), unsafe_allow_html=True)
+
+    # Botões de adicionar (apenas se há formato selecionado)
+    bcols = st.columns(2, gap="small")
+    with bcols[0]:
+        disabled = sel is None
+        label = f"⬅︎ Adicionar a Linhas" if not sel else f"⬅︎ {sel} → Linhas"
+        if st.button(label, use_container_width=True, type="primary",
+                     disabled=disabled, key="add_linha_btn"):
+            if sel and sel not in st.session_state.linhas_inclusas:
                 st.session_state.linhas_inclusas.append(sel)
             st.session_state.formato_selecionado = None
             st.rerun()
-    else:
-        st.caption("Selecione um formato à esquerda")
-    if st.session_state.linhas_inclusas:
-        for i, f in enumerate(st.session_state.linhas_inclusas):
-            r1, r2 = st.columns([4, 1])
-            r1.code(f, language=None)
-            if r2.button("✕", key=f"rm_lin_{i}"):
-                st.session_state.linhas_inclusas.pop(i); st.rerun()
-    else:
-        st.caption("_(vazio)_")
-
-with fa3:
-    st.markdown('<div class="lc-section">Colunas Inclusas</div>',
-                unsafe_allow_html=True)
-    if sel:
-        if st.button(f"➡︎ Adicionar **{sel}** a Colunas",
-                      use_container_width=True, type="primary"):
-            if sel not in st.session_state.colunas_inclusas:
+    with bcols[1]:
+        disabled = sel is None
+        label = f"➡︎ Adicionar a Colunas" if not sel else f"➡︎ {sel} → Colunas"
+        if st.button(label, use_container_width=True, type="primary",
+                     disabled=disabled, key="add_coluna_btn"):
+            if sel and sel not in st.session_state.colunas_inclusas:
                 st.session_state.colunas_inclusas.append(sel)
             st.session_state.formato_selecionado = None
             st.rerun()
-    else:
-        st.caption("Selecione um formato à esquerda")
-    if st.session_state.colunas_inclusas:
-        for i, f in enumerate(st.session_state.colunas_inclusas):
-            r1, r2 = st.columns([4, 1])
-            r1.code(f, language=None)
-            if r2.button("✕", key=f"rm_col_{i}"):
-                st.session_state.colunas_inclusas.pop(i); st.rerun()
-    else:
-        st.caption("_(vazio)_")
+
+    # Linha pra remover formatos individualmente
+    rcols = st.columns(2, gap="small")
+    with rcols[0]:
+        if linhas:
+            rm_l = st.selectbox("Remover de Linhas", ["—"] + linhas,
+                                 key="rm_lin_sel", label_visibility="collapsed")
+            if rm_l and rm_l != "—":
+                st.session_state.linhas_inclusas.remove(rm_l)
+                st.rerun()
+    with rcols[1]:
+        if colunas:
+            rm_c = st.selectbox("Remover de Colunas", ["—"] + colunas,
+                                 key="rm_col_sel", label_visibility="collapsed")
+            if rm_c and rm_c != "—":
+                st.session_state.colunas_inclusas.remove(rm_c)
+                st.rerun()
 
 
 st.divider()
@@ -296,16 +322,16 @@ st.markdown('<div class="lc-section">Geração das Combinações</div>',
             unsafe_allow_html=True)
 
 with st.container(border=True):
-    g1, g2, g3, g4 = st.columns([1, 1, 3, 1.3])
-    soma_min = g1.number_input("Soma mín (120 a 270)", value=120,
+    st.caption("Soma das dezenas — intervalo permitido: 120 a 270")
+    g1, g2, g3, g4 = st.columns([1, 1, 3, 1.4],
+                                  vertical_alignment="bottom")
+    soma_min = g1.number_input("Soma mín", value=120,
                                 min_value=120, max_value=270)
-    soma_max = g2.number_input("Soma máx (120 a 270)", value=270,
+    soma_max = g2.number_input("Soma máx", value=270,
                                 min_value=120, max_value=270)
     nome_arq = g3.text_input("Nome do arquivo", value=f"{int(target)}A.txt")
-    with g4:
-        st.write("")
-        st.write("")
-        gerar = st.button("🎯 Gerar", type="primary", use_container_width=True)
+    gerar = g4.button("🎯 Gerar", type="primary",
+                       use_container_width=True)
 
 
 def enumera(linhas: list[str], colunas: list[str],
