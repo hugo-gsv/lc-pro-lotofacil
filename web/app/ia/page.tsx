@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Brain, Loader2, Wand2, ArrowRight, TrendingUp, Flame, Snowflake, Sparkle } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Brain, Loader2, Wand2, ArrowRight, TrendingUp, Flame, Snowflake, Sparkle, Download, Save, Dices } from "lucide-react";
 import Link from "next/link";
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionTitle } from "@/components/ui/section-title";
 import { MetricCard } from "@/components/ui/metric-card";
-import { dezenasDe } from "@/lib/lottery";
+import { dezenasDe, enumerar } from "@/lib/lottery";
 import { cn } from "@/lib/utils";
 import type { Sugestao } from "@/lib/insights";
 
@@ -32,6 +32,11 @@ export default function IA() {
   } | null>(null);
   const [loading, setLoading] = useState(false);
   const [usarLLM, setUsarLLM] = useState(true);
+
+  // Jogos gerados a partir da sugestão
+  const [fichasFinal, setFichasFinal] = useState(10);
+  const [salvando, setSalvando] = useState(false);
+  const [saveOk, setSaveOk] = useState<number | null>(null);
 
   useEffect(() => {
     fetch("https://servicebus2.caixa.gov.br/portaldeloterias/api/lotofacil",
@@ -116,6 +121,80 @@ export default function IA() {
       colunas: sug.topColunas.map((f) => f.fmt).join(","),
     });
     window.location.href = `/gerador?${params.toString()}`;
+  };
+
+  // === Geração automática de jogos a partir da sugestão ===
+  const jogosCompletos: number[][] = useMemo(() => {
+    if (!sug) return [];
+    const linhas = sug.topLinhas.map((f) => f.fmt);
+    const colunas = sug.topColunas.map((f) => f.fmt);
+    if (linhas.length === 0 || colunas.length === 0) return [];
+    return enumerar(linhas, colunas, sug.soma.sugMin, sug.soma.sugMax);
+  }, [sug]);
+
+  // Ranking dos jogos pela "afinidade" com dezenas quentes (peso 1.0) e
+  // dezenas atrasadas (peso 0.5) — escolhe os top-N
+  const fichasSelecionadas: number[][] = useMemo(() => {
+    if (!sug || jogosCompletos.length === 0) return [];
+    const peso = new Map<number, number>();
+    for (const d of sug.dezenasQuentes) peso.set(d.dezena, (peso.get(d.dezena) ?? 0) + d.freq * 1.0);
+    for (const d of sug.dezenasAtrasadas) peso.set(d.dezena, (peso.get(d.dezena) ?? 0) + d.atraso * 0.5);
+    const scored = jogosCompletos.map((j) => ({
+      jogo: j,
+      score: j.reduce((s, d) => s + (peso.get(d) ?? 0), 0),
+    }));
+    scored.sort((a, b) => b.score - a.score);
+    return scored.slice(0, Math.max(1, fichasFinal)).map((s) => s.jogo);
+  }, [sug, jogosCompletos, fichasFinal]);
+
+  // Sincroniza o alvo do início com fichasFinal quando análise termina
+  useEffect(() => {
+    if (sug) setFichasFinal(alvoJogos);
+  }, [sug]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const baixarTxt = () => {
+    if (fichasSelecionadas.length === 0) return;
+    const txt = fichasSelecionadas
+      .map((j) => j.map((d) => d.toString().padStart(2, "0")).join(" ") + " \r\n")
+      .join("");
+    const blob = new Blob([txt], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `${conc}A-IA.txt`; a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const salvarHistorico = async () => {
+    if (fichasSelecionadas.length === 0) return;
+    setSalvando(true); setSaveOk(null);
+    try {
+      const r = await fetch("/api/jogos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nome: `${conc}A-IA.txt`,
+          tipo: "gerador",
+          params: {
+            origem: "IA Assistant",
+            concurso_alvo: conc, retros, peso_tendencia: pesoTendencia,
+            spq: [sug?.spq.sugMin, sug?.spq.sugMax],
+            csn: [sug?.csn.sugMin, sug?.csn.sugMax],
+            soma: [sug?.soma.sugMin, sug?.soma.sugMax],
+            linhas: sug?.topLinhas.map((f) => f.fmt) ?? [],
+            colunas: sug?.topColunas.map((f) => f.fmt) ?? [],
+            n_total_gerado: jogosCompletos.length,
+            n_fichas_finais: fichasSelecionadas.length,
+          },
+          jogos: fichasSelecionadas,
+        }),
+      });
+      const data = await r.json();
+      if (data.id) setSaveOk(data.id);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setSalvando(false);
+    }
   };
 
   return (
@@ -290,20 +369,149 @@ export default function IA() {
             </ul>
           </div>
 
-          <div className="flex flex-wrap gap-3">
-            <button
-              onClick={aplicar}
-              className="bg-gradient-to-br from-cyan-500 to-cyan-700 text-white font-extrabold rounded-xl px-6 py-3 text-sm shadow-lg shadow-cyan-200 hover:-translate-y-0.5 transition-all flex items-center gap-2"
-            >
-              Aplicar e ir ao Gerador <ArrowRight size={16}/>
-            </button>
-            <Link
-              href="/estatisticas-formato"
-              className="bg-white border border-[#DDE8EC] text-[#1A2A3A] font-bold rounded-xl px-6 py-3 text-sm hover:border-cyan-300 transition-all flex items-center gap-2"
-            >
-              Ver estatísticas detalhadas
-            </Link>
-          </div>
+          {/* Geração automática a partir da sugestão */}
+          {jogosCompletos.length > 0 && (
+            <>
+              <SectionTitle>Jogos gerados</SectionTitle>
+              <div className="bg-white border border-[#DDE8EC] rounded-2xl p-6 mb-6 shadow-sm">
+                <div className="flex flex-wrap items-center justify-between gap-4 mb-5">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-500 to-cyan-700 flex items-center justify-center text-white">
+                      <Dices size={22}/>
+                    </div>
+                    <div>
+                      <div className="text-sm text-[#5C7080]">Combinações geradas com sua sugestão</div>
+                      <div className="text-2xl font-extrabold tabular-nums">
+                        {jogosCompletos.length.toLocaleString("pt-BR")} jogos possíveis
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 text-xs text-[#5C7080]">
+                    {sug.topLinhas.length} formato(s) linha × {sug.topColunas.length} formato(s) coluna<br/>
+                    Soma {sug.soma.sugMin}–{sug.soma.sugMax}
+                  </div>
+                </div>
+
+                <label className="block text-xs font-bold uppercase tracking-wider text-[#5C7080] mb-2">
+                  Quantas fichas você quer? (top selecionados por afinidade com dezenas quentes/atrasadas)
+                </label>
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {[5, 10, 15, 20, 25, 50].map((n) => (
+                    <button
+                      key={n}
+                      onClick={() => setFichasFinal(Math.min(n, jogosCompletos.length))}
+                      className={cn(
+                        "px-4 py-2 rounded-xl text-sm font-bold transition-all",
+                        fichasFinal === n
+                          ? "bg-gradient-to-br from-cyan-500 to-cyan-700 text-white shadow-md shadow-cyan-200"
+                          : "bg-white border border-[#DDE8EC] hover:border-cyan-300"
+                      )}
+                    >
+                      {n} fichas
+                    </button>
+                  ))}
+                  <input
+                    type="number"
+                    min={1}
+                    max={jogosCompletos.length}
+                    value={fichasFinal}
+                    onChange={(e) => setFichasFinal(
+                      Math.max(1, Math.min(jogosCompletos.length, parseInt(e.target.value) || 1))
+                    )}
+                    className="bg-cyan-50 border border-cyan-100 rounded-xl px-3 py-2 text-sm font-semibold w-24 text-center focus:outline-none focus:ring-2 focus:ring-cyan-300"
+                  />
+                </div>
+                <p className="text-[11px] text-[#5C7080] mb-4">
+                  Selecionamos as <strong>{fichasFinal}</strong> melhores fichas de {jogosCompletos.length.toLocaleString("pt-BR")} possíveis
+                  (ranking por dezenas quentes + atrasadas).
+                </p>
+
+                {/* Lista das fichas selecionadas */}
+                <div className="bg-[#FBFDFE] border border-[#DDE8EC] rounded-xl max-h-[420px] overflow-y-auto scrollbar-thin">
+                  {fichasSelecionadas.map((j, i) => (
+                    <div
+                      key={i}
+                      className={cn(
+                        "px-5 py-3 border-b border-[#F2F6F8] last:border-0",
+                        i % 2 === 1 && "bg-white"
+                      )}
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-[10px] font-bold text-[#5C7080] uppercase tracking-wider w-10">
+                          #{(i + 1).toString().padStart(2, "0")}
+                        </span>
+                        <div className="flex flex-wrap gap-1.5 flex-1">
+                          {j.map((d) => (
+                            <span
+                              key={d}
+                              className={cn(
+                                "inline-flex w-8 h-8 items-center justify-center rounded-lg text-xs font-extrabold tabular-nums",
+                                sug.dezenasQuentes.find((q) => q.dezena === d)
+                                  ? "bg-gradient-to-br from-orange-400 to-orange-600 text-white shadow-sm"
+                                  : sug.dezenasAtrasadas.find((q) => q.dezena === d)
+                                  ? "bg-gradient-to-br from-cyan-400 to-cyan-600 text-white shadow-sm"
+                                  : "bg-white border border-[#DDE8EC] text-cyan-700"
+                              )}
+                            >
+                              {d.toString().padStart(2, "0")}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex flex-wrap gap-3 mt-5">
+                  <button
+                    onClick={baixarTxt}
+                    className="bg-gradient-to-br from-cyan-500 to-cyan-700 text-white font-extrabold rounded-xl px-6 py-3 text-sm shadow-lg shadow-cyan-200 hover:-translate-y-0.5 transition-all flex items-center gap-2"
+                  >
+                    <Download size={16}/> Baixar {fichasFinal} fichas (.txt)
+                  </button>
+                  <button
+                    onClick={salvarHistorico}
+                    disabled={salvando || saveOk !== null}
+                    className={cn(
+                      "rounded-xl px-6 py-3 text-sm font-extrabold transition-all flex items-center gap-2",
+                      saveOk !== null
+                        ? "bg-emerald-100 text-emerald-700 cursor-default"
+                        : salvando
+                        ? "bg-[#F4F8FA] text-[#9DABB5] cursor-wait"
+                        : "bg-white border border-[#DDE8EC] hover:border-cyan-300 hover:-translate-y-0.5"
+                    )}
+                  >
+                    {salvando ? <Loader2 className="animate-spin" size={16}/> : <Save size={16}/>}
+                    {saveOk !== null ? `✅ Salvo no histórico (#${saveOk})` : salvando ? "Salvando…" : "Salvar no histórico"}
+                  </button>
+                  <Link
+                    href="/historico"
+                    className="bg-white border border-[#DDE8EC] text-[#1A2A3A] font-bold rounded-xl px-6 py-3 text-sm hover:border-cyan-300 transition-all flex items-center gap-2"
+                  >
+                    Ver histórico
+                  </Link>
+                </div>
+
+                <details className="mt-5">
+                  <summary className="cursor-pointer text-xs text-[#5C7080] font-semibold hover:text-cyan-700">
+                    Avançado: ajustar parâmetros manualmente no Gerador
+                  </summary>
+                  <button
+                    onClick={aplicar}
+                    className="mt-3 bg-white border border-[#DDE8EC] text-[#1A2A3A] font-bold rounded-xl px-4 py-2 text-xs hover:border-cyan-300 transition-all flex items-center gap-2"
+                  >
+                    Aplicar e ir ao Gerador <ArrowRight size={14}/>
+                  </button>
+                </details>
+              </div>
+            </>
+          )}
+
+          {jogosCompletos.length === 0 && (
+            <div className="bg-orange-50 border border-orange-200 rounded-2xl p-5 text-sm text-orange-800 mb-6">
+              ⚠️ Nenhuma combinação atende aos critérios sugeridos. Ajuste o peso da tendência (mais baixo) ou aumente Retros e tente novamente.
+            </div>
+          )}
         </>
       )}
 
