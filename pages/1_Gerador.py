@@ -76,27 +76,28 @@ if not hist:
 
 
 # ---------- Constrói tabela ----------
+# Sempre 5 colunas: Conc | Linha | Coluna | CSN | SPQ
+# CSN/SPQ refletem o tipo selecionado:
+#   - Linhas        → CSN/SPQ do formato linha
+#   - Colunas       → CSN/SPQ do formato coluna
+#   - Linha x Coluna → CSN/SPQ do formato linha (gráfico mostra Soma)
 linhas_data = []
 somas: dict[str, int] = {}
 for c, dez in hist:
     fl = formato_linha(dez); fc = formato_coluna(dez)
     soma = sum(dez)
     cstr = f"{c:04d}"
-    if tipo == "Linhas":
-        linhas_data.append({"Conc": cstr, "Formato": fl,
-                            "CSN": csn(fl), "SPQ": spq(fl)})
-    elif tipo == "Colunas":
-        linhas_data.append({"Conc": cstr, "Formato": fc,
-                            "CSN": csn(fc), "SPQ": spq(fc)})
-    else:  # Linha x Coluna — formato linha + formato coluna SEPARADOS
-        linhas_data.append({
-            "Conc": cstr,
-            "Formato": fl,             # formato da linha
-            "Coluna": fc,              # formato da coluna (nova)
-            "CSN": csn(fl),            # numérico (do formato linha)
-            "SPQ": spq(fl),
-            "Soma": soma,
-        })
+    if tipo == "Colunas":
+        cn, sp = csn(fc), spq(fc)
+    else:  # Linhas ou Linha x Coluna
+        cn, sp = csn(fl), spq(fl)
+    linhas_data.append({
+        "Conc": cstr,
+        "Linha": fl,
+        "Coluna": fc,
+        "CSN": cn,
+        "SPQ": sp,
+    })
     somas[cstr] = soma
 
 
@@ -139,49 +140,30 @@ def make_bar(v: int, vmin: int, vmax: int) -> str:
 
 
 html = ['<div class="lc-history-wrap"><table class="lc-history">']
-if tipo == "Linha x Coluna":
-    html.append(
-        '<thead><tr>'
-        '<th>Conc</th><th>Formato</th><th>Coluna</th>'
-        '<th style="text-align:right">CSN</th>'
-        '<th style="text-align:right">SPQ</th>'
-        '<th>Gráfico</th>'
-        '</tr></thead><tbody>'
-    )
-else:
-    html.append(
-        '<thead><tr>'
-        '<th>Conc</th><th>Formato</th>'
-        '<th style="text-align:right">CSN</th>'
-        '<th style="text-align:right">SPQ</th>'
-        '<th>Gráfico</th>'
-        '</tr></thead><tbody>'
-    )
+html.append(
+    '<thead><tr>'
+    '<th>Conc</th><th>Linha</th><th>Coluna</th>'
+    '<th style="text-align:right">CSN</th>'
+    '<th style="text-align:right">SPQ</th>'
+    '<th>Gráfico</th>'
+    '</tr></thead><tbody>'
+)
 
 for row in linhas_data:
     if tipo == "Linha x Coluna":
-        v = row["Soma"]
-        html.append(
-            f'<tr>'
-            f'<td class="lc-num">{row["Conc"]}</td>'
-            f'<td class="lc-fmt">{row["Formato"]}</td>'
-            f'<td class="lc-fmt">{row["Coluna"]}</td>'
-            f'<td class="lc-num">{row["CSN"]}</td>'
-            f'<td class="lc-num">{row["SPQ"]}</td>'
-            f'<td class="lc-bar">{make_bar(v, GRAF_MIN, GRAF_MAX)}</td>'
-            f'</tr>'
-        )
+        v = somas[row["Conc"]]
     else:
         v = row["SPQ"] if GRAF_NAME == "SPQ" else row["CSN"]
-        html.append(
-            f'<tr>'
-            f'<td class="lc-num">{row["Conc"]}</td>'
-            f'<td class="lc-fmt">{row["Formato"]}</td>'
-            f'<td class="lc-num">{row["CSN"]}</td>'
-            f'<td class="lc-num">{row["SPQ"]}</td>'
-            f'<td class="lc-bar">{make_bar(v, GRAF_MIN, GRAF_MAX)}</td>'
-            f'</tr>'
-        )
+    html.append(
+        f'<tr>'
+        f'<td class="lc-num">{row["Conc"]}</td>'
+        f'<td class="lc-fmt">{row["Linha"]}</td>'
+        f'<td class="lc-fmt">{row["Coluna"]}</td>'
+        f'<td class="lc-num">{row["CSN"]}</td>'
+        f'<td class="lc-num">{row["SPQ"]}</td>'
+        f'<td class="lc-bar">{make_bar(v, GRAF_MIN, GRAF_MAX)}</td>'
+        f'</tr>'
+    )
 html.append("</tbody></table></div>")
 st.markdown("".join(html), unsafe_allow_html=True)
 st.caption(var_caption)
