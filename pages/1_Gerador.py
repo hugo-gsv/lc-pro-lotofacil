@@ -104,52 +104,75 @@ for c, dez in hist:
     somas[cstr] = soma
 
 
-# ---------- Histórico unificado (tabela + gráfico ASCII numa mesma tabela) ----------
-# 31 chars: cada tracinho vale exatamente 1 unidade SPQ
-# (centro=15 → 45; pos 14 → 44; pos 16 → 46)
-CHART_W = 31; CHART_CENTER = CHART_W // 2
-
-# Define qual variável o gráfico mostra. Em modo Linha x Coluna a única
-# faz sentido é Soma (porque envolve linha+coluna juntos). Nos modos
-# simples, o radio escolhe entre SPQ e CSN.
+# ---------- Histórico unificado (tabela + sparkline SVG numa mesma tabela) ----------
 if tipo == "Linha x Coluna":
     GRAF_NAME = "Soma"
     GRAF_MIN, GRAF_MAX = 120, 270
-    var_caption = "Soma das Dezenas — cada tracinho = 5 unidades (range 120..270)"
+    var_caption = f"Soma das Dezenas — range {GRAF_MIN} a {GRAF_MAX}"
 elif graf == "SPQ":
     GRAF_NAME = "SPQ"
     GRAF_MIN, GRAF_MAX = 30, 60
-    var_caption = "SPQ — cada tracinho = 1 unidade (range 30..60)"
+    var_caption = f"SPQ — range {GRAF_MIN} a {GRAF_MAX}"
 else:
     GRAF_NAME = "CSN"
     GRAF_MIN, GRAF_MAX = 10, 629
-    var_caption = "CSN — cada tracinho = 20 unidades (range 10..629)"
+    var_caption = f"CSN — range {GRAF_MIN} a {GRAF_MAX}"
 
 st.markdown(f'<div class="lc-section">Histórico — Gráfico {GRAF_NAME}</div>',
             unsafe_allow_html=True)
 
 
 def make_bar(v: int, vmin: int, vmax: int) -> str:
-    """Gera barra ASCII de 31 colunas com '!' no centro e 'x' na posição de v."""
-    pos = int(round((v - vmin) / max(vmax - vmin, 1) * (CHART_W - 1)))
-    pos = max(0, min(CHART_W - 1, pos))
-    out = []
-    for i in range(CHART_W):
-        if i == pos:
-            out.append('<span class="x">x</span>')
-        elif i == CHART_CENTER:
-            out.append('<span class="center">!</span>')
-        else:
-            out.append("_")
-    return "".join(out)
+    """Sparkline SVG: trilho + 5 ticks + linha do centro + marcador colorido."""
+    SVG_W, SVG_H, PAD = 220, 26, 4
+    track = SVG_W - 2 * PAD
+    frac = (v - vmin) / max(vmax - vmin, 1)
+    frac = max(0.0, min(1.0, frac))
+    pos_x = PAD + frac * track
+    center_x = PAD + track / 2
+    cy = SVG_H / 2
+    # Cor do marker varia: laranja se afastado do centro, cyan se perto
+    dist_to_center = abs(frac - 0.5) * 2  # 0 (centro) → 1 (extremos)
+    marker_color = "#FF6B35" if dist_to_center > 0.15 else "#14C6E4"
+    ticks = "".join(
+        f'<line x1="{PAD + (i/4)*track:.1f}" y1="{cy-3}" x2="{PAD + (i/4)*track:.1f}" y2="{cy+3}" stroke="#D7E5EA" stroke-width="1"/>'
+        for i in range(5)
+    )
+    return (
+        f'<svg viewBox="0 0 {SVG_W} {SVG_H}" preserveAspectRatio="none" '
+        f'width="100%" height="22" style="display:block">'
+        # trilho
+        f'<line x1="{PAD}" y1="{cy}" x2="{SVG_W-PAD}" y2="{cy}" '
+        f'stroke="#E0EAEE" stroke-width="2.5" stroke-linecap="round"/>'
+        # ticks
+        f'{ticks}'
+        # marca do centro (linha vertical cyan)
+        f'<line x1="{center_x}" y1="{cy-7}" x2="{center_x}" y2="{cy+7}" '
+        f'stroke="#0095B6" stroke-width="2" stroke-linecap="round"/>'
+        # marker (círculo do valor) com sombra glow
+        f'<circle cx="{pos_x:.1f}" cy="{cy}" r="6" fill="white" stroke="{marker_color}" stroke-width="2.5"/>'
+        f'<circle cx="{pos_x:.1f}" cy="{cy}" r="3" fill="{marker_color}"/>'
+        f'</svg>'
+    )
 
 
 html = ['<div class="lc-history-wrap"><table class="lc-history">']
+# Larguras padronizadas (fixed table-layout no CSS)
 html.append(
+    '<colgroup>'
+    '<col style="width:12%">'    # Concurso
+    '<col style="width:13%">'    # Linha
+    '<col style="width:13%">'    # Coluna
+    '<col style="width:11%">'    # CSN
+    '<col style="width:11%">'    # SPQ
+    '<col style="width:40%">'    # Gráfico
+    '</colgroup>'
     '<thead><tr>'
-    '<th>Conc</th><th>Linha</th><th>Coluna</th>'
-    '<th style="text-align:right">CSN</th>'
-    '<th style="text-align:right">SPQ</th>'
+    '<th>Concurso</th>'
+    '<th>Linha</th>'
+    '<th>Coluna</th>'
+    '<th>CSN</th>'
+    '<th>SPQ</th>'
     '<th>Gráfico</th>'
     '</tr></thead><tbody>'
 )

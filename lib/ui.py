@@ -450,6 +450,9 @@ def inject_css() -> None:
             font-size: 13px;
             background: white;
         }}
+        .lc-history {{
+            table-layout: fixed;       /* larguras de colunas padronizadas */
+        }}
         .lc-history thead th {{
             background: linear-gradient(180deg, #FBFDFE 0%, #F4F8FA 100%);
             color: var(--ink);
@@ -458,7 +461,7 @@ def inject_css() -> None:
             font-size: 10.5px;
             letter-spacing: 1px;
             padding: 12px 14px;
-            text-align: left;
+            text-align: center;
             border-bottom: 1px solid var(--border);
             position: sticky;
             top: 0;
@@ -469,6 +472,7 @@ def inject_css() -> None:
             border-bottom: 1px solid #F2F6F8;
             color: var(--ink);
             white-space: nowrap;
+            text-align: center;        /* centraliza valores em TODAS as colunas */
         }}
         .lc-history tbody tr:nth-child(even) td {{
             background: #FBFDFE;
@@ -482,7 +486,6 @@ def inject_css() -> None:
         .lc-history td.lc-num {{
             font-variant-numeric: tabular-nums;
             font-weight: 600;
-            text-align: right;
         }}
         .lc-history td.lc-fmt {{
             font-family: 'JetBrains Mono', monospace;
@@ -490,21 +493,14 @@ def inject_css() -> None:
             color: var(--primary-dark);
         }}
         .lc-history td.lc-bar {{
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 14px;
-            padding: 7px 16px;
-            white-space: pre;
-            color: #C8D4DA;
-            letter-spacing: 1.5px;     /* alarga visualmente sem distorcer escala */
-            width: 1%;                  /* shrink-to-fit pra não sobrar espaço */
+            padding: 6px 18px;
         }}
-        .lc-history td.lc-bar .x {{
-            color: var(--accent);
-            font-weight: 800;
+        .lc-history td.lc-bar svg {{
+            display: block;
+            overflow: visible;
         }}
-        .lc-history td.lc-bar .center {{
-            color: var(--primary-dark);
-            font-weight: 800;
+        .lc-history td.lc-bar svg circle {{
+            filter: drop-shadow(0 1px 2px rgba(255,107,53,.4));
         }}
 
         /* Container border + sombra */
