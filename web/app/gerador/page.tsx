@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { Suspense, useEffect, useMemo, useState, useTransition } from "react";
+import { useSearchParams } from "next/navigation";
 import { Sparkles, X, Download, Loader2, Plus, ArrowLeft, ArrowRight } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionTitle } from "@/components/ui/section-title";
@@ -13,9 +14,22 @@ import { cn } from "@/lib/utils";
 type Tipo = "Linhas" | "Colunas" | "LinhaXColuna";
 type Graf = "SPQ" | "CSN";
 
-export default function Gerador() {
-  const [target, setTarget] = useState(3674);
-  const [retros, setRetros] = useState(10);
+export default function GeradorPage() {
+  return (
+    <Suspense fallback={<div className="text-[#5C7080]">Carregando…</div>}>
+      <Gerador />
+    </Suspense>
+  );
+}
+
+function Gerador() {
+  const sp = useSearchParams();
+  const [target, setTarget] = useState(() =>
+    parseInt(sp.get("target") ?? "3674") || 3674
+  );
+  const [retros, setRetros] = useState(() =>
+    parseInt(sp.get("retros") ?? "10") || 10
+  );
   const [tipo, setTipo] = useState<Tipo>("Linhas");
   const [graf, setGraf] = useState<Graf>("SPQ");
   const [hist, setHist] = useState<{ c: number; dez: number[] }[]>([]);
@@ -75,16 +89,22 @@ export default function Gerador() {
     return { name: "CSN", min: 10, max: 629 };
   }, [tipo, graf]);
 
-  // Estimativas
-  const [spqMin, setSpqMin] = useState(44);
-  const [spqMax, setSpqMax] = useState(47);
-  const [csnMin, setCsnMin] = useState(200);
-  const [csnMax, setCsnMax] = useState(500);
+  // Estimativas (com pré-fill via URL params da IA)
+  const [spqMin, setSpqMin] = useState(() => parseInt(sp.get("spqMin") ?? "44") || 44);
+  const [spqMax, setSpqMax] = useState(() => parseInt(sp.get("spqMax") ?? "47") || 47);
+  const [csnMin, setCsnMin] = useState(() => parseInt(sp.get("csnMin") ?? "200") || 200);
+  const [csnMax, setCsnMax] = useState(() => parseInt(sp.get("csnMax") ?? "500") || 500);
   const [formatosAceitos, setFormatosAceitos] = useState<string[]>([]);
   const [formatoSel, setFormatoSel] = useState<string | null>(null);
   const [busca, setBusca] = useState("");
-  const [linhasInc, setLinhasInc] = useState<string[]>([]);
-  const [colunasInc, setColunasInc] = useState<string[]>([]);
+  const [linhasInc, setLinhasInc] = useState<string[]>(() => {
+    const v = sp.get("linhas");
+    return v ? v.split(",").filter(Boolean) : [];
+  });
+  const [colunasInc, setColunasInc] = useState<string[]>(() => {
+    const v = sp.get("colunas");
+    return v ? v.split(",").filter(Boolean) : [];
+  });
 
   const formatosFiltrados = useMemo(() => {
     const q = busca.trim();
@@ -102,9 +122,9 @@ export default function Gerador() {
     );
   };
 
-  // Geração
-  const [somaMin, setSomaMin] = useState(120);
-  const [somaMax, setSomaMax] = useState(270);
+  // Geração (com pré-fill via URL params da IA)
+  const [somaMin, setSomaMin] = useState(() => parseInt(sp.get("somaMin") ?? "120") || 120);
+  const [somaMax, setSomaMax] = useState(() => parseInt(sp.get("somaMax") ?? "270") || 270);
   const [nomeArq, setNomeArq] = useState("");
   const [pending, startTransition] = useTransition();
   const [gerados, setGerados] = useState<number[][] | null>(null);
