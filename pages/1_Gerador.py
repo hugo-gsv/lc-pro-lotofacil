@@ -160,12 +160,12 @@ html = ['<div class="lc-history-wrap"><table class="lc-history">']
 # Larguras padronizadas (fixed table-layout no CSS)
 html.append(
     '<colgroup>'
-    '<col style="width:12%">'    # Concurso
-    '<col style="width:13%">'    # Linha
-    '<col style="width:13%">'    # Coluna
-    '<col style="width:11%">'    # CSN
-    '<col style="width:11%">'    # SPQ
-    '<col style="width:40%">'    # Gráfico
+    '<col style="width:9%">'     # Concurso
+    '<col style="width:10%">'    # Linha
+    '<col style="width:10%">'    # Coluna
+    '<col style="width:8%">'     # CSN
+    '<col style="width:8%">'     # SPQ
+    '<col style="width:55%">'    # Gráfico
     '</colgroup>'
     '<thead><tr>'
     '<th>Concurso</th>'
