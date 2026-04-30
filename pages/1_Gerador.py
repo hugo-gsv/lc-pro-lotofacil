@@ -225,8 +225,8 @@ with fa1:
         st.info("Defina SPQ/CSN e clique em **Mostrar formatos** acima.")
     else:
         st.caption(f"{len(formatos)} formato(s) no intervalo — clique para selecionar")
-        # Grid de chips (5 colunas)
-        N_COLS = 5
+        # Grid de chips (4 colunas pra caber 5 dígitos numa linha)
+        N_COLS = 4
         for r0 in range(0, len(formatos), N_COLS):
             cols_grid = st.columns(N_COLS, gap="small")
             for c, fmt in enumerate(formatos[r0:r0+N_COLS]):

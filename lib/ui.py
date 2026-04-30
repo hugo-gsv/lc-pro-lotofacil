@@ -433,7 +433,9 @@ def inject_css() -> None:
             font-weight: 700;
             color: var(--primary-dark);
             font-size: 14px;
-            letter-spacing: 0.5px;
+            letter-spacing: 1px;
+            padding: 8px 4px;
+            white-space: nowrap;
         }}
 
         /* Inputs com focus ring */
