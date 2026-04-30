@@ -82,8 +82,15 @@ export default function Gerador() {
   const [csnMax, setCsnMax] = useState(500);
   const [formatosAceitos, setFormatosAceitos] = useState<string[]>([]);
   const [formatoSel, setFormatoSel] = useState<string | null>(null);
+  const [busca, setBusca] = useState("");
   const [linhasInc, setLinhasInc] = useState<string[]>([]);
   const [colunasInc, setColunasInc] = useState<string[]>([]);
+
+  const formatosFiltrados = useMemo(() => {
+    const q = busca.trim();
+    if (!q) return formatosAceitos;
+    return formatosAceitos.filter((f) => f.includes(q));
+  }, [formatosAceitos, busca]);
 
   const mostrarFormatos = () => {
     setFormatoSel(null);
@@ -317,27 +324,55 @@ export default function Gerador() {
             </div>
           ) : (
             <>
+              <div className="relative mb-2">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={busca}
+                  onChange={(e) => setBusca(e.target.value)}
+                  placeholder="Buscar formato (ex: 33 ou 24333)…"
+                  className="w-full bg-white border border-[#DDE8EC] rounded-lg pl-9 pr-9 py-2 text-sm font-mono font-semibold tracking-wider focus:outline-none focus:ring-2 focus:ring-cyan-300 focus:border-cyan-300"
+                />
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9DABB5] text-sm">🔍</span>
+                {busca && (
+                  <button
+                    onClick={() => setBusca("")}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full text-[#9DABB5] hover:bg-red-50 hover:text-red-500 flex items-center justify-center transition"
+                    aria-label="Limpar busca"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
               <p className="text-xs text-[#5C7080] mb-2">
-                {formatosAceitos.length} formato(s) — clique para selecionar
+                {formatosFiltrados.length} de {formatosAceitos.length} formato(s)
+                {busca && <span> • filtro: <code className="font-mono text-cyan-700">{busca}</code></span>}
+                {" — clique para selecionar"}
               </p>
               <div className="bg-white border border-[#DDE8EC] rounded-2xl overflow-hidden shadow-sm max-h-[360px] overflow-y-auto scrollbar-thin">
-                {formatosAceitos.map((f) => {
-                  const isSel = f === formatoSel;
-                  return (
-                    <button
-                      key={f}
-                      onClick={() => setFormatoSel(isSel ? null : f)}
-                      className={cn(
-                        "w-full px-5 py-3 text-center font-mono font-bold text-[15px] tracking-[1.5px] transition-all border-b border-[#F2F6F8] last:border-0",
-                        isSel
-                          ? "bg-gradient-to-br from-cyan-500 to-cyan-700 text-white shadow-inner border-l-4 border-l-orange-500"
-                          : "text-cyan-700 hover:bg-cyan-50"
-                      )}
-                    >
-                      {f}
-                    </button>
-                  );
-                })}
+                {formatosFiltrados.length === 0 ? (
+                  <div className="px-5 py-8 text-center text-sm text-[#5C7080]">
+                    Nenhum formato corresponde a <code className="font-mono text-cyan-700">{busca}</code>.
+                  </div>
+                ) : (
+                  formatosFiltrados.map((f) => {
+                    const isSel = f === formatoSel;
+                    return (
+                      <button
+                        key={f}
+                        onClick={() => setFormatoSel(isSel ? null : f)}
+                        className={cn(
+                          "w-full px-5 py-3 text-center font-mono font-bold text-[15px] tracking-[1.5px] transition-all border-b border-[#F2F6F8] last:border-0",
+                          isSel
+                            ? "bg-gradient-to-br from-cyan-500 to-cyan-700 text-white shadow-inner border-l-4 border-l-orange-500"
+                            : "text-cyan-700 hover:bg-cyan-50"
+                        )}
+                      >
+                        {f}
+                      </button>
+                    );
+                  })
+                )}
               </div>
             </>
           )}
