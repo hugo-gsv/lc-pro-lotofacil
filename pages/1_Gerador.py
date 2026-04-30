@@ -56,12 +56,15 @@ with st.container(border=True):
         target = st.number_input("Para Concurso", min_value=2, max_value=ult + 1,
                                   value=ult + 1, step=1)
     with cc2:
-        retros = st.number_input("Retros", min_value=5, max_value=200, value=30, step=5)
+        retros = st.number_input("Retros", min_value=5, max_value=200, value=10, step=5)
     with cc3:
         tipo = st.radio("Dados de", ["Linhas", "Colunas", "Linha x Coluna"],
-                        horizontal=True, index=1)
+                        horizontal=True, index=0)
     with cc4:
-        graf = st.radio("Gráfico", ["SPQ", "CSN"], horizontal=True)
+        graf = st.radio("Gráfico",
+                         ["SPQ (30 a 60)", "CSN (10 a 629)"],
+                         horizontal=True)
+        graf = "SPQ" if graf.startswith("SPQ") else "CSN"
 
 st.write("")
 
@@ -246,14 +249,11 @@ st.markdown('<div class="lc-section">Geração das Combinações</div>',
             unsafe_allow_html=True)
 
 with st.container(border=True):
-    st.caption("Soma das dezenas — intervalo permitido: 120 a 270")
     g1, g2, g3, g4 = st.columns([1, 1, 3, 1.3])
-    soma_min = g1.number_input("Soma mín", value=120,
-                                min_value=120, max_value=270,
-                                label_visibility="visible")
-    soma_max = g2.number_input("Soma máx", value=270,
-                                min_value=120, max_value=270,
-                                label_visibility="visible")
+    soma_min = g1.number_input("Soma mín (120 a 270)", value=120,
+                                min_value=120, max_value=270)
+    soma_max = g2.number_input("Soma máx (120 a 270)", value=270,
+                                min_value=120, max_value=270)
     nome_arq = g3.text_input("Nome do arquivo", value=f"{int(target)}A.txt")
     with g4:
         st.write("")
