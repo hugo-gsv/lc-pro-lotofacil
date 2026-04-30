@@ -11,6 +11,7 @@ from lib.lottery import (
     coluna_de, csn, dezenas_de, fetch_concurso, fetch_concurso_retry,
     fetch_range, formato_coluna, formato_linha, spq, todos_formatos,
 )
+from lib.storage import salvar_jogos
 from lib.ui import inject_css, page_header, footer
 
 
@@ -312,20 +313,42 @@ if gerar:
         if not jogos:
             st.warning("Nenhuma combinação encontrada. Reduza filtros.")
         else:
-            st.success(f"✅ **{len(jogos)} combinações geradas.**")
-            buf = io.StringIO()
-            for j in jogos:
-                buf.write(" ".join(f"{d:02d}" for d in j) + " \r\n")
-            r1, r2 = st.columns([1, 3])
+            # Persiste no histórico (SQLite no servidor)
+            params = {
+                "concurso_alvo": int(target),
+                "retros": int(retros),
+                "tipo_dados": tipo,
+                "linhas": list(st.session_state.linhas_inclusas),
+                "colunas": list(st.session_state.colunas_inclusas),
+                "soma_min": int(soma_min),
+                "soma_max": int(soma_max),
+            }
+            saved_id = salvar_jogos(nome_arq, "gerador", params, jogos)
+            st.success(
+                f"✅ **{len(jogos)} combinações geradas e salvas no histórico** "
+                f"(ID #{saved_id} — `{nome_arq}`)"
+            )
+
+            r1, r2, r3 = st.columns([1.2, 1.2, 2.6])
             with r1:
+                buf = io.StringIO()
+                for j in jogos:
+                    buf.write(" ".join(f"{d:02d}" for d in j) + " \r\n")
                 st.download_button(
-                    "⬇️ Baixar arquivo",
+                    "⬇️ Baixar .txt",
                     data=buf.getvalue().encode("ascii"),
-                    file_name=nome_arq,
-                    mime="text/plain",
-                    type="primary",
+                    file_name=nome_arq, mime="text/plain",
                     use_container_width=True,
                 )
+            with r2:
+                st.page_link("pages/4_Historico.py",
+                             label="📂 Ver histórico",
+                             use_container_width=True)
+            with r3:
+                st.page_link("pages/2_Filtrar_Jogo.py",
+                             label="🔍 Ir para Filtrar Jogo",
+                             use_container_width=True)
+
             with st.expander(f"Ver as {len(jogos)} combinações"):
                 preview = jogos[:500]
                 for i, j in enumerate(preview, 1):
