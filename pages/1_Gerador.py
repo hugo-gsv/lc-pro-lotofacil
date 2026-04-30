@@ -123,36 +123,23 @@ st.markdown(f'<div class="lc-section">Histórico — Gráfico {GRAF_NAME}</div>'
 
 
 def make_bar(v: int, vmin: int, vmax: int) -> str:
-    """Sparkline SVG: trilho + 5 ticks + linha do centro + marcador colorido."""
-    SVG_W, SVG_H, PAD = 220, 26, 4
-    track = SVG_W - 2 * PAD
+    """Sparkline em HTML/CSS puro: trilho + 5 ticks + linha do centro + marcador.
+    Vantagem sobre SVG: círculos sempre redondos, responsivo sem distorção."""
     frac = (v - vmin) / max(vmax - vmin, 1)
     frac = max(0.0, min(1.0, frac))
-    pos_x = PAD + frac * track
-    center_x = PAD + track / 2
-    cy = SVG_H / 2
-    # Cor do marker varia: laranja se afastado do centro, cyan se perto
-    dist_to_center = abs(frac - 0.5) * 2  # 0 (centro) → 1 (extremos)
-    marker_color = "#FF6B35" if dist_to_center > 0.15 else "#14C6E4"
+    pct = frac * 100
+    dist_to_center = abs(frac - 0.5) * 2
+    color_class = "lc-mk-or" if dist_to_center > 0.15 else "lc-mk-cy"
     ticks = "".join(
-        f'<line x1="{PAD + (i/4)*track:.1f}" y1="{cy-3}" x2="{PAD + (i/4)*track:.1f}" y2="{cy+3}" stroke="#D7E5EA" stroke-width="1"/>'
-        for i in range(5)
+        f'<span class="lc-tick" style="left:{i*25}%"></span>' for i in range(5)
     )
     return (
-        f'<svg viewBox="0 0 {SVG_W} {SVG_H}" preserveAspectRatio="none" '
-        f'width="100%" height="22" style="display:block">'
-        # trilho
-        f'<line x1="{PAD}" y1="{cy}" x2="{SVG_W-PAD}" y2="{cy}" '
-        f'stroke="#E0EAEE" stroke-width="2.5" stroke-linecap="round"/>'
-        # ticks
+        f'<div class="lc-spark">'
+        f'<div class="lc-track"></div>'
         f'{ticks}'
-        # marca do centro (linha vertical cyan)
-        f'<line x1="{center_x}" y1="{cy-7}" x2="{center_x}" y2="{cy+7}" '
-        f'stroke="#0095B6" stroke-width="2" stroke-linecap="round"/>'
-        # marker (círculo do valor) com sombra glow
-        f'<circle cx="{pos_x:.1f}" cy="{cy}" r="6" fill="white" stroke="{marker_color}" stroke-width="2.5"/>'
-        f'<circle cx="{pos_x:.1f}" cy="{cy}" r="3" fill="{marker_color}"/>'
-        f'</svg>'
+        f'<span class="lc-center"></span>'
+        f'<span class="lc-marker {color_class}" style="left:{pct:.2f}%"></span>'
+        f'</div>'
     )
 
 
@@ -160,12 +147,12 @@ html = ['<div class="lc-history-wrap"><table class="lc-history">']
 # Larguras padronizadas (fixed table-layout no CSS)
 html.append(
     '<colgroup>'
-    '<col style="width:9%">'     # Concurso
+    '<col style="width:11%">'    # Concurso
     '<col style="width:10%">'    # Linha
     '<col style="width:10%">'    # Coluna
     '<col style="width:8%">'     # CSN
     '<col style="width:8%">'     # SPQ
-    '<col style="width:55%">'    # Gráfico
+    '<col style="width:53%">'    # Gráfico
     '</colgroup>'
     '<thead><tr>'
     '<th>Concurso</th>'

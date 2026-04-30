@@ -460,12 +460,13 @@ def inject_css() -> None:
             text-transform: uppercase;
             font-size: 10.5px;
             letter-spacing: 1px;
-            padding: 12px 14px;
+            padding: 12px 8px;
             text-align: center;
             border-bottom: 1px solid var(--border);
             position: sticky;
             top: 0;
             z-index: 1;
+            white-space: nowrap;       /* evita quebra do CONCURSO */
         }}
         .lc-history tbody td {{
             padding: 7px 14px;
@@ -493,14 +494,60 @@ def inject_css() -> None:
             color: var(--primary-dark);
         }}
         .lc-history td.lc-bar {{
-            padding: 6px 18px;
+            padding: 6px 22px;
+            vertical-align: middle;
         }}
-        .lc-history td.lc-bar svg {{
-            display: block;
-            overflow: visible;
+        /* === Sparkline (HTML/CSS puro, sem SVG distorcido) === */
+        .lc-spark {{
+            position: relative;
+            width: 100%;
+            height: 22px;
         }}
-        .lc-history td.lc-bar svg circle {{
-            filter: drop-shadow(0 1px 2px rgba(255,107,53,.4));
+        .lc-spark .lc-track {{
+            position: absolute;
+            top: 50%; left: 0; right: 0; height: 3px;
+            background: linear-gradient(90deg, #E0EAEE, #C8D4DA, #E0EAEE);
+            border-radius: 2px;
+            transform: translateY(-50%);
+        }}
+        .lc-spark .lc-tick {{
+            position: absolute;
+            top: 50%; width: 1px; height: 7px;
+            background: #B5C3CB;
+            transform: translate(-50%, -50%);
+        }}
+        .lc-spark .lc-center {{
+            position: absolute;
+            top: 50%; left: 50%;
+            width: 2.5px; height: 14px;
+            background: var(--primary-dark);
+            border-radius: 2px;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 0 6px rgba(20,198,228,.35);
+        }}
+        .lc-spark .lc-marker {{
+            position: absolute;
+            top: 50%;
+            width: 14px; height: 14px;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            border: 2.5px solid var(--accent);
+            box-shadow: 0 2px 6px rgba(255,107,53,.45);
+        }}
+        .lc-spark .lc-marker::after {{
+            content: '';
+            position: absolute;
+            inset: 3px;
+            border-radius: 50%;
+            background: var(--accent);
+        }}
+        .lc-spark .lc-marker.lc-mk-cy {{
+            border-color: var(--primary);
+            box-shadow: 0 2px 6px rgba(20,198,228,.45);
+        }}
+        .lc-spark .lc-marker.lc-mk-cy::after {{
+            background: var(--primary);
         }}
 
         /* Container border + sombra */
