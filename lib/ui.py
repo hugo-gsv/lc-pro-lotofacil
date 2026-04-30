@@ -194,7 +194,7 @@ def inject_css() -> None:
             background: white;
             border: 1px solid var(--border);
             border-radius: 16px;
-            padding: 20px 22px 18px 22px;
+            padding: 18px 18px 16px 18px;
             box-shadow: var(--shadow-xs);
             transition: all .2s ease;
             height: 100%;
@@ -234,15 +234,13 @@ def inject_css() -> None:
             text-overflow: ellipsis;
         }}
         .lc-metric-value {{
-            font-size: 24px;
+            font-size: 22px;
             font-weight: 800;
             color: var(--ink);
             line-height: 1.15;
             margin-top: 6px;
             letter-spacing: -.02em;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            /* Sem nowrap/ellipsis — deixa quebrar se precisar */
         }}
         .lc-metric-sub {{
             font-size: 11px;
