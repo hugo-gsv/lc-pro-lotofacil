@@ -105,7 +105,8 @@ for c, dez in hist:
 
 
 # ---------- Histórico unificado (tabela + gráfico ASCII numa mesma tabela) ----------
-CHART_W = 31; CHART_CENTER = CHART_W // 2
+# Largura maior preenche melhor a célula da coluna 'Gráfico' (sem espaços vazios)
+CHART_W = 51; CHART_CENTER = CHART_W // 2
 
 # Define qual variável o gráfico mostra. Em modo Linha x Coluna a única
 # faz sentido é Soma (porque envolve linha+coluna juntos). Nos modos

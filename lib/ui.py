@@ -491,11 +491,12 @@ def inject_css() -> None:
         }}
         .lc-history td.lc-bar {{
             font-family: 'JetBrains Mono', monospace;
-            font-size: 13px;
-            padding: 7px 16px;
+            font-size: 12.5px;
+            padding: 7px 14px;
             white-space: pre;
             color: #C8D4DA;
-            letter-spacing: 1px;
+            letter-spacing: 0.5px;
+            width: 1%;       /* shrink-to-fit pra não sobrar espaço */
         }}
         .lc-history td.lc-bar .x {{
             color: var(--accent);
