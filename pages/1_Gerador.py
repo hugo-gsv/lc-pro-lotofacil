@@ -221,27 +221,34 @@ with fa1:
     st.markdown('<div class="lc-section">Formatos Aceitos</div>',
                 unsafe_allow_html=True)
     formatos = st.session_state.formatos_aceitos
+    # Detecta clique via query param (?fmt=24333)
+    qp = st.query_params
+    if "fmt" in qp:
+        clicked = qp["fmt"]
+        if clicked == st.session_state.formato_selecionado:
+            st.session_state.formato_selecionado = None
+        else:
+            st.session_state.formato_selecionado = clicked
+        del st.query_params["fmt"]
+        st.rerun()
+
     if not formatos:
         st.info("Defina SPQ/CSN e clique em **Mostrar formatos** acima.")
     else:
         st.caption(
-            f"{len(formatos)} formato(s) no intervalo — clique numa linha para selecionar"
+            f"{len(formatos)} formato(s) no intervalo — clique no número para selecionar"
         )
-        rows_data = [{"Formato": f} for f in formatos]
-        event = st.dataframe(
-            rows_data,
-            use_container_width=True,
-            hide_index=True,
-            height=320,
-            on_select="rerun",
-            selection_mode="single-row",
-            key="formatos_table",
-            column_config={
-                "Formato": st.column_config.TextColumn("Formato"),
-            },
+        rows_html = []
+        sel_atual = st.session_state.formato_selecionado
+        for fmt in formatos:
+            cls = "fmt-row" + (" fmt-row-sel" if fmt == sel_atual else "")
+            rows_html.append(
+                f'<a class="{cls}" href="?fmt={fmt}" target="_self">{fmt}</a>'
+            )
+        st.markdown(
+            f'<div class="lc-fmt-list">{"".join(rows_html)}</div>',
+            unsafe_allow_html=True,
         )
-        if event.selection.rows:
-            st.session_state.formato_selecionado = formatos[event.selection.rows[0]]
 
 sel = st.session_state.formato_selecionado
 

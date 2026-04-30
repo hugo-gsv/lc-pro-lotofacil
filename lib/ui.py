@@ -446,6 +446,43 @@ def inject_css() -> None:
             box-shadow: 0 0 0 3px rgba(20,198,228,.15);
         }}
 
+        /* Lista de formatos clicáveis (sem checkbox) */
+        .lc-fmt-list {{
+            max-height: 360px;
+            overflow-y: auto;
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            background: white;
+            box-shadow: var(--shadow-xs);
+        }}
+        .lc-fmt-list .fmt-row {{
+            display: block;
+            padding: 10px 16px;
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 700;
+            color: var(--primary-dark);
+            text-decoration: none;
+            border-bottom: 1px solid #F2F6F8;
+            transition: background .12s, color .12s, transform .08s;
+            letter-spacing: 1.5px;
+            text-align: center;
+            font-size: 15px;
+        }}
+        .lc-fmt-list .fmt-row:last-child {{
+            border-bottom: none;
+        }}
+        .lc-fmt-list .fmt-row:hover {{
+            background: #F0F9FB;
+            color: var(--primary-darker);
+            text-decoration: none;
+        }}
+        .lc-fmt-list .fmt-row-sel,
+        .lc-fmt-list .fmt-row-sel:hover {{
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: white !important;
+            box-shadow: inset 4px 0 0 var(--accent);
+        }}
+
         /* Células dos Inclusos (Linhas/Colunas) — fica estilo tabela */
         .lc-incluso-cell {{
             font-family: 'JetBrains Mono', monospace;
