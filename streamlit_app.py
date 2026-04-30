@@ -7,6 +7,7 @@ import streamlit as st
 from lib.lottery import (
     csn, dezenas_de, fetch_concurso, formato_coluna, formato_linha, spq,
 )
+from lib.storage import backend_name
 from lib.ui import (
     dezenas_balls, footer, hero, inject_css, metric_card, tool_card,
 )
@@ -93,5 +94,10 @@ with t3:
     ), unsafe_allow_html=True)
     st.page_link("pages/3_Conferidor.py", label="Abrir Conferidor →",
                  use_container_width=True)
+
+# Indicador discreto do backend de storage
+backend = backend_name()
+icon = "☁️" if backend == "supabase" else "💾"
+st.caption(f"{icon} Storage: **{backend}**")
 
 footer()
