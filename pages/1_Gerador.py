@@ -75,23 +75,28 @@ if not hist:
     st.stop()
 
 
-# ---------- Constrói tabela + chart ----------
-# Em modo "Linha x Coluna" o app original mantém os rótulos Formato/CSN/SPQ
-# mas as células passam a mostrar: formato_linha / formato_coluna / soma.
+# ---------- Constrói tabela ----------
 linhas_data = []
-somas: dict[str, int] = {}     # para o gráfico em "Linha x Coluna"
+somas: dict[str, int] = {}
 for c, dez in hist:
     fl = formato_linha(dez); fc = formato_coluna(dez)
     soma = sum(dez)
-    if tipo == "Linhas":
-        col_fmt, col_csn, col_spq = fl, str(csn(fl)), str(spq(fl))
-    elif tipo == "Colunas":
-        col_fmt, col_csn, col_spq = fc, str(csn(fc)), str(spq(fc))
-    else:  # Linha x Coluna
-        col_fmt, col_csn, col_spq = fl, fc, str(soma)
     cstr = f"{c:04d}"
-    linhas_data.append({"Conc": cstr, "Formato": col_fmt,
-                        "CSN": col_csn, "SPQ": col_spq})
+    if tipo == "Linhas":
+        linhas_data.append({"Conc": cstr, "Formato": fl,
+                            "CSN": csn(fl), "SPQ": spq(fl)})
+    elif tipo == "Colunas":
+        linhas_data.append({"Conc": cstr, "Formato": fc,
+                            "CSN": csn(fc), "SPQ": spq(fc)})
+    else:  # Linha x Coluna — formato linha + formato coluna SEPARADOS
+        linhas_data.append({
+            "Conc": cstr,
+            "Formato": fl,             # formato da linha
+            "Coluna": fc,              # formato da coluna (nova)
+            "CSN": csn(fl),            # numérico (do formato linha)
+            "SPQ": spq(fl),
+            "Soma": soma,
+        })
     somas[cstr] = soma
 
 
@@ -126,34 +131,51 @@ def make_bar(v: int) -> str:
 
 
 html = ['<div class="lc-history-wrap"><table class="lc-history">']
-html.append(
-    '<thead><tr>'
-    '<th>Conc</th><th>Formato</th><th style="text-align:right">CSN</th>'
-    '<th style="text-align:right">SPQ</th>'
-    '<th style="background:#1A2A3A;color:#B8E8F2">Gráfico</th>'
-    '<th style="background:#1A2A3A;color:#B8E8F2;text-align:right">Valor</th>'
-    '</tr></thead><tbody>'
-)
+if tipo == "Linha x Coluna":
+    html.append(
+        '<thead><tr>'
+        '<th>Conc</th><th>Formato</th><th>Coluna</th>'
+        '<th style="text-align:right">CSN</th>'
+        '<th style="text-align:right">SPQ</th>'
+        '<th style="text-align:right">Soma</th>'
+        '<th>Gráfico</th>'
+        '</tr></thead><tbody>'
+    )
+else:
+    html.append(
+        '<thead><tr>'
+        '<th>Conc</th><th>Formato</th>'
+        '<th style="text-align:right">CSN</th>'
+        '<th style="text-align:right">SPQ</th>'
+        '<th>Gráfico</th>'
+        '</tr></thead><tbody>'
+    )
+
 for row in linhas_data:
     if tipo == "Linha x Coluna":
-        v = somas[row["Conc"]]
-    elif graf == "SPQ":
-        v = int(row["SPQ"])
+        v = row["Soma"]
+        html.append(
+            f'<tr>'
+            f'<td class="lc-num">{row["Conc"]}</td>'
+            f'<td class="lc-fmt">{row["Formato"]}</td>'
+            f'<td class="lc-fmt">{row["Coluna"]}</td>'
+            f'<td class="lc-num">{row["CSN"]}</td>'
+            f'<td class="lc-num">{row["SPQ"]}</td>'
+            f'<td class="lc-num">{row["Soma"]}</td>'
+            f'<td class="lc-bar">{make_bar(v)}</td>'
+            f'</tr>'
+        )
     else:
-        v = int(row["CSN"])
-    # CSN/SPQ são string (em Linha x Coluna são formatos, não números) — alinha conforme conteúdo
-    csn_class = "lc-fmt" if tipo == "Linha x Coluna" else "lc-num"
-    spq_class = "lc-num"
-    html.append(
-        f'<tr>'
-        f'<td class="lc-num">{row["Conc"]}</td>'
-        f'<td class="lc-fmt">{row["Formato"]}</td>'
-        f'<td class="{csn_class}">{row["CSN"]}</td>'
-        f'<td class="{spq_class}">{row["SPQ"]}</td>'
-        f'<td class="lc-bar">{make_bar(v)}</td>'
-        f'<td class="lc-val">→{v}</td>'
-        f'</tr>'
-    )
+        v = row["SPQ"] if graf == "SPQ" else row["CSN"]
+        html.append(
+            f'<tr>'
+            f'<td class="lc-num">{row["Conc"]}</td>'
+            f'<td class="lc-fmt">{row["Formato"]}</td>'
+            f'<td class="lc-num">{row["CSN"]}</td>'
+            f'<td class="lc-num">{row["SPQ"]}</td>'
+            f'<td class="lc-bar">{make_bar(v)}</td>'
+            f'</tr>'
+        )
 html.append("</tbody></table></div>")
 st.markdown("".join(html), unsafe_allow_html=True)
 st.caption(var_caption)

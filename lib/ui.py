@@ -357,26 +357,18 @@ def inject_css() -> None:
             color: var(--primary-dark);
         }}
         .lc-history td.lc-bar {{
-            background: var(--ink);
-            color: #B8E8F2;
             font-family: 'JetBrains Mono', monospace;
-            font-size: 12px;
+            font-size: 13px;
             padding: 6px 14px;
             white-space: pre;
+            color: #B5C3CB;     /* sublinhados em cinza claro */
+            letter-spacing: 0;
         }}
         .lc-history td.lc-bar .x {{
-            color: #FF6B35; font-weight: 700;
+            color: var(--accent); font-weight: 700; /* laranja */
         }}
         .lc-history td.lc-bar .center {{
-            color: var(--primary);
-        }}
-        .lc-history td.lc-val {{
-            background: var(--ink);
-            color: #B8E8F2;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 12px;
-            text-align: right;
-            padding: 6px 14px 6px 0;
+            color: var(--primary-dark); font-weight: 700; /* cyan */
         }}
         .lc-history-wrap {{
             max-height: 540px;
