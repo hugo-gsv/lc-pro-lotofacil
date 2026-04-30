@@ -413,16 +413,27 @@ def inject_css() -> None:
         .stButton > button:hover {{
             transform: translateY(-1px);
             box-shadow: var(--shadow-md);
+            border-color: var(--primary);
         }}
         .stButton > button[kind="primary"] {{
             background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
             border: none;
             box-shadow: var(--shadow-glow);
             font-weight: 800;
+            color: white;
         }}
         .stButton > button[kind="primary"]:hover {{
             transform: translateY(-2px);
             box-shadow: var(--shadow-glow-lg);
+        }}
+        /* Chips de formatos — visual de tag/badge clicável */
+        .stButton > button[kind="secondary"] {{
+            background: white;
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 700;
+            color: var(--primary-dark);
+            font-size: 14px;
+            letter-spacing: 0.5px;
         }}
 
         /* Inputs com focus ring */

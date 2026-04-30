@@ -212,26 +212,51 @@ with st.container(border=True):
             ]
 
 
-fa1, fa2, fa3 = st.columns(3, gap="medium")
+if "formato_selecionado" not in st.session_state:
+    st.session_state.formato_selecionado = None
+
+fa1, fa2, fa3 = st.columns([2, 1, 1], gap="medium")
 
 with fa1:
     st.markdown('<div class="lc-section">Formatos Aceitos</div>',
                 unsafe_allow_html=True)
     formatos = st.session_state.formatos_aceitos
-    if formatos:
-        sel = st.selectbox(f"{len(formatos)} dentro do range", formatos,
-                           label_visibility="collapsed")
-    else:
-        sel = None
+    if not formatos:
         st.info("Defina SPQ/CSN e clique em **Mostrar formatos** acima.")
+    else:
+        st.caption(f"{len(formatos)} formato(s) no intervalo — clique para selecionar")
+        # Grid de chips (5 colunas)
+        N_COLS = 5
+        for r0 in range(0, len(formatos), N_COLS):
+            cols_grid = st.columns(N_COLS, gap="small")
+            for c, fmt in enumerate(formatos[r0:r0+N_COLS]):
+                with cols_grid[c]:
+                    is_sel = (fmt == st.session_state.formato_selecionado)
+                    if st.button(
+                        fmt,
+                        key=f"fmt_btn_{fmt}",
+                        type="primary" if is_sel else "secondary",
+                        use_container_width=True,
+                    ):
+                        st.session_state.formato_selecionado = (
+                            None if is_sel else fmt
+                        )
+                        st.rerun()
+
+sel = st.session_state.formato_selecionado
 
 with fa2:
     st.markdown('<div class="lc-section">Linhas Inclusas</div>',
                 unsafe_allow_html=True)
-    if sel and st.button("⬅︎ Adicionar a Linhas", use_container_width=True):
-        if sel not in st.session_state.linhas_inclusas:
-            st.session_state.linhas_inclusas.append(sel)
+    if sel:
+        if st.button(f"⬅︎ Adicionar **{sel}** a Linhas",
+                      use_container_width=True, type="primary"):
+            if sel not in st.session_state.linhas_inclusas:
+                st.session_state.linhas_inclusas.append(sel)
+            st.session_state.formato_selecionado = None
             st.rerun()
+    else:
+        st.caption("Selecione um formato à esquerda")
     if st.session_state.linhas_inclusas:
         for i, f in enumerate(st.session_state.linhas_inclusas):
             r1, r2 = st.columns([4, 1])
@@ -239,15 +264,20 @@ with fa2:
             if r2.button("✕", key=f"rm_lin_{i}"):
                 st.session_state.linhas_inclusas.pop(i); st.rerun()
     else:
-        st.caption("Vazio. Adicione formatos com 'Linhas' marcado.")
+        st.caption("_(vazio)_")
 
 with fa3:
     st.markdown('<div class="lc-section">Colunas Inclusas</div>',
                 unsafe_allow_html=True)
-    if sel and st.button("➡︎ Adicionar a Colunas", use_container_width=True):
-        if sel not in st.session_state.colunas_inclusas:
-            st.session_state.colunas_inclusas.append(sel)
+    if sel:
+        if st.button(f"➡︎ Adicionar **{sel}** a Colunas",
+                      use_container_width=True, type="primary"):
+            if sel not in st.session_state.colunas_inclusas:
+                st.session_state.colunas_inclusas.append(sel)
+            st.session_state.formato_selecionado = None
             st.rerun()
+    else:
+        st.caption("Selecione um formato à esquerda")
     if st.session_state.colunas_inclusas:
         for i, f in enumerate(st.session_state.colunas_inclusas):
             r1, r2 = st.columns([4, 1])
@@ -255,7 +285,7 @@ with fa3:
             if r2.button("✕", key=f"rm_col_{i}"):
                 st.session_state.colunas_inclusas.pop(i); st.rerun()
     else:
-        st.caption("Vazio.")
+        st.caption("_(vazio)_")
 
 
 st.divider()
