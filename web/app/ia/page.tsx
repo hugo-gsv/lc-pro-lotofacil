@@ -35,6 +35,7 @@ export default function IA() {
 
   // Jogos gerados a partir da sugestão
   const [fichasFinal, setFichasFinal] = useState(10);
+  const [modoSelecao, setModoSelecao] = useState<"quentes" | "atrasadas" | "equilibrado" | "diverso">("equilibrado");
   const [salvando, setSalvando] = useState(false);
   const [saveOk, setSaveOk] = useState<number | null>(null);
 
@@ -132,20 +133,114 @@ export default function IA() {
     return enumerar(linhas, colunas, sug.soma.sugMin, sug.soma.sugMax);
   }, [sug]);
 
-  // Ranking dos jogos pela "afinidade" com dezenas quentes (peso 1.0) e
-  // dezenas atrasadas (peso 0.5) — escolhe os top-N
+  // Ranking conforme modo de seleção escolhido
   const fichasSelecionadas: number[][] = useMemo(() => {
     if (!sug || jogosCompletos.length === 0) return [];
-    const peso = new Map<number, number>();
-    for (const d of sug.dezenasQuentes) peso.set(d.dezena, (peso.get(d.dezena) ?? 0) + d.freq * 1.0);
-    for (const d of sug.dezenasAtrasadas) peso.set(d.dezena, (peso.get(d.dezena) ?? 0) + d.atraso * 0.5);
-    const scored = jogosCompletos.map((j) => ({
-      jogo: j,
-      score: j.reduce((s, d) => s + (peso.get(d) ?? 0), 0),
-    }));
-    scored.sort((a, b) => b.score - a.score);
-    return scored.slice(0, Math.max(1, fichasFinal)).map((s) => s.jogo);
-  }, [sug, jogosCompletos, fichasFinal]);
+    const N = Math.max(1, Math.min(fichasFinal, jogosCompletos.length));
+
+    // Pesos auxiliares
+    const pesoQuentes = new Map<number, number>();
+    for (const d of sug.dezenasQuentes) pesoQuentes.set(d.dezena, d.freq);
+    const pesoAtrasadas = new Map<number, number>();
+    for (const d of sug.dezenasAtrasadas) pesoAtrasadas.set(d.dezena, d.atraso);
+
+    const scoreQuentes = (j: number[]) => j.reduce((s, d) => s + (pesoQuentes.get(d) ?? 0), 0);
+    const scoreAtrasadas = (j: number[]) => j.reduce((s, d) => s + (pesoAtrasadas.get(d) ?? 0), 0);
+    const scoreEquilibrado = (j: number[]) => scoreQuentes(j) * 0.6 + scoreAtrasadas(j) * 0.4;
+
+    if (modoSelecao === "quentes") {
+      return [...jogosCompletos]
+        .map((j) => ({ j, s: scoreQuentes(j) }))
+        .sort((a, b) => b.s - a.s)
+        .slice(0, N).map((x) => x.j);
+    }
+
+    if (modoSelecao === "atrasadas") {
+      return [...jogosCompletos]
+        .map((j) => ({ j, s: scoreAtrasadas(j) }))
+        .sort((a, b) => b.s - a.s)
+        .slice(0, N).map((x) => x.j);
+    }
+
+    if (modoSelecao === "equilibrado") {
+      // Equilibrado: 40% top quentes + 40% top atrasadas + 20% aleatório,
+      // depois dedup
+      const nQ = Math.max(1, Math.round(N * 0.4));
+      const nA = Math.max(1, Math.round(N * 0.4));
+      const nR = Math.max(0, N - nQ - nA);
+      const ordQ = [...jogosCompletos]
+        .map((j) => ({ j, s: scoreQuentes(j) }))
+        .sort((a, b) => b.s - a.s)
+        .slice(0, nQ * 3).map((x) => x.j);
+      const ordA = [...jogosCompletos]
+        .map((j) => ({ j, s: scoreAtrasadas(j) }))
+        .sort((a, b) => b.s - a.s)
+        .slice(0, nA * 3).map((x) => x.j);
+      const out: number[][] = [];
+      const addUnique = (arr: number[][], max: number) => {
+        for (const j of arr) {
+          if (out.length >= N) break;
+          const key = j.join(",");
+          if (!out.some((x) => x.join(",") === key)) {
+            out.push(j);
+            if (max-- <= 0) break;
+          }
+        }
+      };
+      addUnique(ordQ, nQ);
+      addUnique(ordA, nA);
+      // resto: aleatório
+      const restantes = jogosCompletos.filter(
+        (j) => !out.some((x) => x.join(",") === j.join(","))
+      );
+      for (let i = restantes.length - 1; i > 0; i--) {
+        const r = Math.floor(Math.random() * (i + 1));
+        [restantes[i], restantes[r]] = [restantes[r], restantes[i]];
+      }
+      addUnique(restantes, nR);
+      return out.slice(0, N);
+    }
+
+    // diverso: greedy max-diversity (Hamming distance)
+    if (modoSelecao === "diverso") {
+      // Começa com a ficha de maior score equilibrado
+      const ranked = [...jogosCompletos]
+        .map((j) => ({ j, s: scoreEquilibrado(j) }))
+        .sort((a, b) => b.s - a.s);
+      const out: number[][] = [ranked[0].j];
+      const taken = new Set<string>([ranked[0].j.join(",")]);
+      while (out.length < N) {
+        let best: number[] | null = null;
+        let bestMinDist = -1;
+        // amostra para performance
+        const sample = ranked.slice(0, Math.min(ranked.length, 1000));
+        for (const { j } of sample) {
+          const k = j.join(",");
+          if (taken.has(k)) continue;
+          const setJ = new Set(j);
+          // distância mínima para qualquer já escolhida
+          let minDist = 99;
+          for (const o of out) {
+            let dist = 0;
+            for (const d of o) if (!setJ.has(d)) dist++;
+            if (dist < minDist) minDist = dist;
+            if (minDist === 0) break;
+          }
+          if (minDist > bestMinDist) {
+            bestMinDist = minDist;
+            best = j;
+            if (minDist === 15) break;
+          }
+        }
+        if (!best) break;
+        out.push(best);
+        taken.add(best.join(","));
+      }
+      return out;
+    }
+
+    return [];
+  }, [sug, jogosCompletos, fichasFinal, modoSelecao]);
 
   // Sincroniza o alvo do início com fichasFinal quando análise termina
   useEffect(() => {
@@ -393,7 +488,33 @@ export default function IA() {
                 </div>
 
                 <label className="block text-xs font-bold uppercase tracking-wider text-[#5C7080] mb-2">
-                  Quantas fichas você quer? (top selecionados por afinidade com dezenas quentes/atrasadas)
+                  Estratégia de seleção
+                </label>
+                <div className="flex flex-wrap gap-2 mb-4">
+                  {([
+                    { v: "equilibrado", label: "⚖️ Equilibrado", desc: "Mistura quentes + atrasadas + aleatório" },
+                    { v: "quentes",     label: "🔥 Quentes",     desc: "Prioriza dezenas que mais saíram" },
+                    { v: "atrasadas",   label: "❄️ Atrasadas",   desc: "Prioriza dezenas há tempo sem sair" },
+                    { v: "diverso",     label: "🎲 Diverso",     desc: "Maximiza variedade entre fichas" },
+                  ] as const).map((m) => (
+                    <button
+                      key={m.v}
+                      onClick={() => setModoSelecao(m.v)}
+                      title={m.desc}
+                      className={cn(
+                        "px-4 py-2 rounded-xl text-sm font-bold transition-all",
+                        modoSelecao === m.v
+                          ? "bg-gradient-to-br from-cyan-500 to-cyan-700 text-white shadow-md shadow-cyan-200"
+                          : "bg-white border border-[#DDE8EC] hover:border-cyan-300"
+                      )}
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+
+                <label className="block text-xs font-bold uppercase tracking-wider text-[#5C7080] mb-2">
+                  Quantas fichas você quer?
                 </label>
                 <div className="flex flex-wrap gap-2 mb-3">
                   {[5, 10, 15, 20, 25, 50].map((n) => (
@@ -421,10 +542,51 @@ export default function IA() {
                     className="bg-cyan-50 border border-cyan-100 rounded-xl px-3 py-2 text-sm font-semibold w-24 text-center focus:outline-none focus:ring-2 focus:ring-cyan-300"
                   />
                 </div>
-                <p className="text-[11px] text-[#5C7080] mb-4">
-                  Selecionamos as <strong>{fichasFinal}</strong> melhores fichas de {jogosCompletos.length.toLocaleString("pt-BR")} possíveis
-                  (ranking por dezenas quentes + atrasadas).
-                </p>
+                <div className="bg-cyan-50/50 border border-cyan-100 rounded-xl px-4 py-3 mb-4 text-[12px] text-[#1A2A3A] leading-relaxed">
+                  <div className="font-bold text-cyan-800 mb-1">
+                    {fichasSelecionadas.length} fichas de {jogosCompletos.length.toLocaleString("pt-BR")} possíveis
+                  </div>
+                  {modoSelecao === "equilibrado" && (
+                    <>
+                      🔄 <strong>Equilibrado:</strong> 40% top quentes + 40% top atrasadas + 20% aleatório.
+                      <span className="text-[#5C7080]"> Mistura cobertura e variedade — recomendado para uso geral.</span>
+                    </>
+                  )}
+                  {modoSelecao === "quentes" && (
+                    <>
+                      🔥 <strong>Quentes:</strong> top fichas com maior soma de dezenas que mais saíram nos últimos {retros}.
+                      <span className="text-[#5C7080]"> Tendência: dezenas em sequência costumam concentrar.</span>
+                    </>
+                  )}
+                  {modoSelecao === "atrasadas" && (
+                    <>
+                      ❄️ <strong>Atrasadas:</strong> top fichas com maior soma de atrasos das dezenas presentes.
+                      <span className="text-[#5C7080]"> Aposta na regressão à média — &quot;dezenas devem voltar&quot;.</span>
+                    </>
+                  )}
+                  {modoSelecao === "diverso" && (
+                    <>
+                      🎲 <strong>Diverso:</strong> algoritmo greedy de máxima diversidade (Hamming).
+                      <span className="text-[#5C7080]"> Cada nova ficha é a mais diferente possível das já escolhidas — máxima cobertura.</span>
+                    </>
+                  )}
+                </div>
+
+                {/* Legenda */}
+                <div className="flex flex-wrap gap-3 mb-3 text-[11px]">
+                  <span className="flex items-center gap-1.5">
+                    <span className="inline-block w-4 h-4 rounded bg-gradient-to-br from-orange-400 to-orange-600"></span>
+                    Quente
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="inline-block w-4 h-4 rounded bg-gradient-to-br from-cyan-400 to-cyan-600"></span>
+                    Atrasada
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="inline-block w-4 h-4 rounded bg-white border border-[#DDE8EC]"></span>
+                    Outra
+                  </span>
+                </div>
 
                 {/* Lista das fichas selecionadas */}
                 <div className="bg-[#FBFDFE] border border-[#DDE8EC] rounded-xl max-h-[420px] overflow-y-auto scrollbar-thin">
