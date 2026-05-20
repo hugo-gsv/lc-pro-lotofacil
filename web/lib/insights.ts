@@ -5,7 +5,7 @@
  */
 
 import {
-  csn, formatoColuna, formatoLinha, spq,
+  calcVar, csn, enumerar, formatoColuna, formatoLinha, spq,
   BORDAS, FIBO, MODAIS, PRIMOS,
 } from "./lottery";
 
@@ -44,7 +44,8 @@ export type SerieAnalise = {
 function analisarSerie(
   valores: number[],
   centroTeorico: number,
-  pesoTendencia: number = 0.6
+  pesoTendencia: number = 0.6,
+  larguraFaixa: number = 1
 ): SerieAnalise {
   const m = media(valores);
   const sd = desvio(valores, m);
@@ -58,8 +59,8 @@ function analisarSerie(
   // Se tendência está acima → puxa pra baixo (regressão).
   const ajuste = (centroTeorico - tend) * pesoTendencia * 0.5;
   const sugCentro = m + ajuste;
-  const sugMin = Math.round(sugCentro - sd);
-  const sugMax = Math.round(sugCentro + sd);
+  const sugMin = Math.round(sugCentro - sd * larguraFaixa);
+  const sugMax = Math.round(sugCentro + sd * larguraFaixa);
 
   const direcao =
     Math.abs(tend - centroTeorico) < 0.3 * sd
@@ -276,10 +277,16 @@ export type Sugestao = {
   razoesGerais: string[];
 };
 
+export type SugerirOptions = {
+  qtdFormatos?: number;
+  larguraFaixa?: number;
+};
+
 export function sugerir(
   historico: { c: number; dez: number[] }[],
   alvoJogos = 5,
-  pesoTendencia = 0.6
+  pesoTendencia = 0.6,
+  options: SugerirOptions = {}
 ): Sugestao {
   if (historico.length === 0) {
     throw new Error("Histórico vazio");
@@ -291,11 +298,12 @@ export function sugerir(
   const seriesCsnColuna = historico.map((r) => csn(formatoColuna(r.dez)));
   const seriesSoma = historico.map((r) => r.dez.reduce((a, b) => a + b, 0));
 
-  const spqLinhaA = analisarSerie(seriesSpqLinha, 45, pesoTendencia);
-  const csnLinhaA = analisarSerie(seriesCsnLinha, 320, pesoTendencia);
-  const spqColunaA = analisarSerie(seriesSpqColuna, 45, pesoTendencia);
-  const csnColunaA = analisarSerie(seriesCsnColuna, 320, pesoTendencia);
-  const somaA = analisarSerie(seriesSoma, 195, pesoTendencia);
+  const larguraFaixa = options.larguraFaixa ?? 1;
+  const spqLinhaA = analisarSerie(seriesSpqLinha, 45, pesoTendencia, larguraFaixa);
+  const csnLinhaA = analisarSerie(seriesCsnLinha, 320, pesoTendencia, larguraFaixa);
+  const spqColunaA = analisarSerie(seriesSpqColuna, 45, pesoTendencia, larguraFaixa);
+  const csnColunaA = analisarSerie(seriesCsnColuna, 320, pesoTendencia, larguraFaixa);
+  const somaA = analisarSerie(seriesSoma, 195, pesoTendencia, larguraFaixa);
 
   const formatosL = analisarFormatos(historico, formatoLinha);
   const formatosC = analisarFormatos(historico, formatoColuna);
@@ -316,12 +324,13 @@ export function sugerir(
   // A IA precisa gerar 5 fichas; se escolher só 2-3 formatos, pode ficar sem
   // diversidade suficiente. Por isso pegamos 6 de linha e 6 de coluna: é um
   // portfólio pequeno, explicável, mas com espaço para o ranking final.
+  const qtdFormatos = options.qtdFormatos ?? Math.max(4, Math.min(6, alvoJogos + 1));
   const topLinhas = [...formatosL]
     .sort((a, b) => scoreFormato(b, spqLinhaA, csnLinhaA) - scoreFormato(a, spqLinhaA, csnLinhaA))
-    .slice(0, Math.max(4, Math.min(6, alvoJogos + 1)));
+    .slice(0, qtdFormatos);
   const topColunas = [...formatosC]
     .sort((a, b) => scoreFormato(b, spqColunaA, csnColunaA) - scoreFormato(a, spqColunaA, csnColunaA))
-    .slice(0, Math.max(4, Math.min(6, alvoJogos + 1)));
+    .slice(0, qtdFormatos);
 
   const variaveis = analisarVariaveis(historico);
   const dezenasAtrasadas = [...variaveis]
@@ -372,5 +381,428 @@ export function sugerir(
     dezenasQuentes,
     jogosEstimados,
     razoesGerais,
+  };
+}
+
+// =============================================================================
+//  Walk-forward training: testa metodologias no passado antes de decidir hoje
+// =============================================================================
+export type PerfilIA = {
+  id: string;
+  nome: string;
+  descricao: string;
+  pesoTendencia: number;
+  larguraFaixa: number;
+  qtdFormatos: number;
+  pesoFormato: number;
+  pesoQuente: number;
+  pesoAtraso: number;
+  pesoDiversidade: number;
+  pesoCobertura: number;
+  penalQuentes: number;
+  penalAtrasadas: number;
+};
+
+export const PERFIS_IA: PerfilIA[] = [
+  {
+    id: "centro-equilibrado",
+    nome: "Centro equilibrado",
+    descricao: "Regressão ao centro, formato forte, quentes e atrasadas em proporção moderada.",
+    pesoTendencia: 0.6,
+    larguraFaixa: 1,
+    qtdFormatos: 6,
+    pesoFormato: 1,
+    pesoQuente: 0.22,
+    pesoAtraso: 0.33,
+    pesoDiversidade: 3.8,
+    pesoCobertura: 1.4,
+    penalQuentes: 2.2,
+    penalAtrasadas: 1.5,
+  },
+  {
+    id: "centro-apertado",
+    nome: "Centro apertado",
+    descricao: "Faixas menores, tentando evitar extremos de SPQ, CSN e soma.",
+    pesoTendencia: 0.75,
+    larguraFaixa: 0.75,
+    qtdFormatos: 5,
+    pesoFormato: 1.15,
+    pesoQuente: 0.18,
+    pesoAtraso: 0.28,
+    pesoDiversidade: 4.1,
+    pesoCobertura: 1.2,
+    penalQuentes: 2.5,
+    penalAtrasadas: 1.7,
+  },
+  {
+    id: "faixa-aberta",
+    nome: "Faixa aberta",
+    descricao: "Faixas mais largas para aceitar variação real antes do ranking final.",
+    pesoTendencia: 0.45,
+    larguraFaixa: 1.25,
+    qtdFormatos: 7,
+    pesoFormato: 0.9,
+    pesoQuente: 0.2,
+    pesoAtraso: 0.3,
+    pesoDiversidade: 4.3,
+    pesoCobertura: 1.8,
+    penalQuentes: 2,
+    penalAtrasadas: 1.3,
+  },
+  {
+    id: "formatos-indice",
+    nome: "Formato + atraso",
+    descricao: "Dá mais peso a formatos com frequência, atraso e índice alto.",
+    pesoTendencia: 0.55,
+    larguraFaixa: 1,
+    qtdFormatos: 6,
+    pesoFormato: 1.35,
+    pesoQuente: 0.16,
+    pesoAtraso: 0.26,
+    pesoDiversidade: 3.5,
+    pesoCobertura: 1.1,
+    penalQuentes: 2.3,
+    penalAtrasadas: 1.4,
+  },
+  {
+    id: "variaveis-quentes",
+    nome: "Variáveis quentes",
+    descricao: "Valoriza dezenas frequentes sem abandonar formatos e centro.",
+    pesoTendencia: 0.55,
+    larguraFaixa: 1,
+    qtdFormatos: 6,
+    pesoFormato: 0.9,
+    pesoQuente: 0.42,
+    pesoAtraso: 0.16,
+    pesoDiversidade: 3.4,
+    pesoCobertura: 1.4,
+    penalQuentes: 1.5,
+    penalAtrasadas: 1.8,
+  },
+  {
+    id: "regressao-atrasadas",
+    nome: "Regressão atrasadas",
+    descricao: "Valoriza dezenas atrasadas e formatos esquecidos, com freio contra excesso.",
+    pesoTendencia: 0.7,
+    larguraFaixa: 1.1,
+    qtdFormatos: 6,
+    pesoFormato: 1,
+    pesoQuente: 0.12,
+    pesoAtraso: 0.55,
+    pesoDiversidade: 3.9,
+    pesoCobertura: 1.5,
+    penalQuentes: 2.7,
+    penalAtrasadas: 1.1,
+  },
+];
+
+export type CarteiraIA = {
+  jogos: number[][];
+  totalGerado: number;
+  perfil: PerfilIA;
+};
+
+export function gerarCarteiraIA(
+  historico: { c: number; dez: number[] }[],
+  sug: Sugestao,
+  perfil: PerfilIA = PERFIS_IA[0],
+  totalFichas = 5
+): CarteiraIA {
+  const linhas = sug.topLinhas.map((f) => f.fmt);
+  const colunas = sug.topColunas.map((f) => f.fmt);
+  const jogosCompletos = linhas.length && colunas.length
+    ? enumerar(linhas, colunas, sug.soma.sugMin, sug.soma.sugMax)
+    : [];
+  if (!jogosCompletos.length) {
+    return { jogos: [], totalGerado: 0, perfil };
+  }
+
+  const ultimo = historico.length ? new Set(historico[historico.length - 1].dez) : new Set<number>();
+  const pesoQuentes = new Map<number, number>();
+  for (const d of sug.dezenasQuentes) pesoQuentes.set(d.dezena, d.freq);
+  const pesoAtrasadas = new Map<number, number>();
+  for (const d of sug.dezenasAtrasadas) pesoAtrasadas.set(d.dezena, d.atraso);
+
+  const fmtLinhaScore = new Map(
+    sug.topLinhas.map((f, i) => [f.fmt, 12 - i * 1.5 + f.freq * 2 + f.atraso * 0.35])
+  );
+  const fmtColScore = new Map(
+    sug.topColunas.map((f, i) => [f.fmt, 12 - i * 1.5 + f.freq * 2 + f.atraso * 0.35])
+  );
+
+  const inRangeBonus = (value: number, min: number, max: number, bonus: number) =>
+    value >= min && value <= max
+      ? bonus
+      : -Math.min(10, Math.min(Math.abs(value - min), Math.abs(value - max)) * 0.8);
+  const bandBonus = (value: number, min: number, max: number, bonus: number) =>
+    value >= min && value <= max
+      ? bonus
+      : -Math.min(8, Math.min(Math.abs(value - min), Math.abs(value - max)) * 1.5);
+
+  const scoreBase = (j: number[]) => {
+    const fl = formatoLinha(j);
+    const fc = formatoColuna(j);
+    const soma = j.reduce((a, b) => a + b, 0);
+    const hot = j.reduce((s, d) => s + (pesoQuentes.get(d) ?? 0), 0);
+    const atraso = j.reduce((s, d) => s + (pesoAtrasadas.get(d) ?? 0), 0);
+    const nHot = j.filter((d) => pesoQuentes.has(d)).length;
+    const nAtr = j.filter((d) => pesoAtrasadas.has(d)).length;
+    const rep = calcVar("Repetição Último", j, ultimo);
+    const pares = calcVar("Pares", j);
+    const bordas = calcVar("Bordas", j);
+    const modas = calcVar("Modas", j);
+    const primos = calcVar("Primos", j);
+    const fib = calcVar("Fibonacci", j);
+
+    return (
+      ((fmtLinhaScore.get(fl) ?? 0) + (fmtColScore.get(fc) ?? 0)) * perfil.pesoFormato +
+      inRangeBonus(spq(fl), sug.linha.spq.sugMin, sug.linha.spq.sugMax, 10) +
+      inRangeBonus(csn(fl), sug.linha.csn.sugMin, sug.linha.csn.sugMax, 8) +
+      inRangeBonus(spq(fc), sug.coluna.spq.sugMin, sug.coluna.spq.sugMax, 10) +
+      inRangeBonus(csn(fc), sug.coluna.csn.sugMin, sug.coluna.csn.sugMax, 8) +
+      inRangeBonus(soma, sug.soma.sugMin, sug.soma.sugMax, 12) +
+      bandBonus(pares, 7, 8, 7) +
+      bandBonus(bordas, 9, 11, 6) +
+      bandBonus(modas, 8, 9, 6) +
+      bandBonus(primos, 5, 7, 4) +
+      bandBonus(fib, 3, 5, 4) +
+      bandBonus(rep, 7, 10, 5) +
+      hot * perfil.pesoQuente +
+      atraso * perfil.pesoAtraso -
+      Math.max(0, nHot - 8) * perfil.penalQuentes -
+      Math.max(0, nAtr - 5) * perfil.penalAtrasadas -
+      Math.abs(soma - 195) * 0.12
+    );
+  };
+
+  const hamming = (a: number[], b: number[]) => {
+    const sb = new Set(b);
+    let diff = 0;
+    for (const d of a) if (!sb.has(d)) diff++;
+    return diff;
+  };
+
+  const ranked = [...jogosCompletos]
+    .map((j) => ({ j, s: scoreBase(j) }))
+    .sort((a, b) => b.s - a.s)
+    .slice(0, Math.min(2500, jogosCompletos.length));
+
+  const N = Math.max(1, Math.min(totalFichas, ranked.length));
+  const out: number[][] = [ranked[0].j];
+  const taken = new Set([ranked[0].j.join(",")]);
+
+  while (out.length < N) {
+    let best: { j: number[]; score: number } | null = null;
+    const coverage = new Set(out.flat());
+    for (const item of ranked) {
+      const key = item.j.join(",");
+      if (taken.has(key)) continue;
+      const minDist = Math.min(...out.map((o) => hamming(item.j, o)));
+      const newCoverage = item.j.filter((d) => !coverage.has(d)).length;
+      const portfolioScore = item.s + minDist * perfil.pesoDiversidade + newCoverage * perfil.pesoCobertura;
+      if (!best || portfolioScore > best.score) best = { j: item.j, score: portfolioScore };
+    }
+    if (!best) break;
+    out.push(best.j);
+    taken.add(best.j.join(","));
+  }
+
+  return { jogos: out, totalGerado: jogosCompletos.length, perfil };
+}
+
+export type ResultadoPerfilTreino = {
+  perfil: PerfilIA;
+  simulacoes: number;
+  mediaMelhorAcerto: number;
+  maxAcerto: number;
+  taxa10Mais: number;
+  taxa11Mais: number;
+  taxa12Mais: number;
+  taxa13Mais: number;
+  taxa14Mais: number;
+  taxa15: number;
+  coberturaLinha: number;
+  coberturaColuna: number;
+  coberturaSoma: number;
+  coberturaLinhaColuna: number;
+  score: number;
+};
+
+export type ExemploTreino = {
+  concurso: number;
+  perfil: string;
+  melhorAcerto: number;
+  linhaReal: string;
+  colunaReal: string;
+  somaReal: number;
+};
+
+export type TreinamentoIA = {
+  retros: number;
+  simulacoes: number;
+  concursoInicio: number;
+  concursoFim: number;
+  perfilVencedor: PerfilIA;
+  ranking: ResultadoPerfilTreino[];
+  exemplos: ExemploTreino[];
+  conclusao: string;
+};
+
+function hitCount(jogo: number[], resultado: Set<number>) {
+  let hits = 0;
+  for (const d of jogo) if (resultado.has(d)) hits++;
+  return hits;
+}
+
+function taxa(v: number, total: number) {
+  return total ? v / total : 0;
+}
+
+export function treinarMetodologiaIA(
+  historicoLongo: { c: number; dez: number[] }[],
+  retros = 30,
+  totalFichas = 5,
+  maxSimulacoes = 120
+): TreinamentoIA | null {
+  const ord = [...historicoLongo].sort((a, b) => a.c - b.c);
+  if (ord.length <= retros + 5) return null;
+
+  const inicio = Math.max(retros, ord.length - maxSimulacoes);
+  const simulacoes = ord.length - inicio;
+  const acumulado = PERFIS_IA.map((perfil) => ({
+    perfil,
+    somaMelhor: 0,
+    maxAcerto: 0,
+    dezMais: 0,
+    onzeMais: 0,
+    dozeMais: 0,
+    trezeMais: 0,
+    quatorzeMais: 0,
+    quinze: 0,
+    linha: 0,
+    coluna: 0,
+    soma: 0,
+    linhaColuna: 0,
+  }));
+  const exemplos: ExemploTreino[] = [];
+
+  for (let i = inicio; i < ord.length; i++) {
+    const alvo = ord[i];
+    const janela = ord.slice(i - retros, i);
+    const resultado = new Set(alvo.dez);
+    const flReal = formatoLinha(alvo.dez);
+    const fcReal = formatoColuna(alvo.dez);
+    const somaReal = alvo.dez.reduce((a, b) => a + b, 0);
+
+    acumulado.forEach((acc) => {
+      const sug = sugerir(janela, totalFichas, acc.perfil.pesoTendencia, {
+        larguraFaixa: acc.perfil.larguraFaixa,
+        qtdFormatos: acc.perfil.qtdFormatos,
+      });
+      const carteira = gerarCarteiraIA(janela, sug, acc.perfil, totalFichas);
+      const melhor = carteira.jogos.length
+        ? Math.max(...carteira.jogos.map((j) => hitCount(j, resultado)))
+        : 0;
+
+      acc.somaMelhor += melhor;
+      acc.maxAcerto = Math.max(acc.maxAcerto, melhor);
+      if (melhor >= 10) acc.dezMais++;
+      if (melhor >= 11) acc.onzeMais++;
+      if (melhor >= 12) acc.dozeMais++;
+      if (melhor >= 13) acc.trezeMais++;
+      if (melhor >= 14) acc.quatorzeMais++;
+      if (melhor >= 15) acc.quinze++;
+
+      const acertouLinha =
+        spq(flReal) >= sug.linha.spq.sugMin &&
+        spq(flReal) <= sug.linha.spq.sugMax &&
+        csn(flReal) >= sug.linha.csn.sugMin &&
+        csn(flReal) <= sug.linha.csn.sugMax;
+      const acertouColuna =
+        spq(fcReal) >= sug.coluna.spq.sugMin &&
+        spq(fcReal) <= sug.coluna.spq.sugMax &&
+        csn(fcReal) >= sug.coluna.csn.sugMin &&
+        csn(fcReal) <= sug.coluna.csn.sugMax;
+      const acertouSoma = somaReal >= sug.soma.sugMin && somaReal <= sug.soma.sugMax;
+      if (acertouLinha) acc.linha++;
+      if (acertouColuna) acc.coluna++;
+      if (acertouSoma) acc.soma++;
+      if (acertouLinha && acertouColuna) acc.linhaColuna++;
+
+      if (melhor >= 12) {
+        exemplos.push({
+          concurso: alvo.c,
+          perfil: acc.perfil.nome,
+          melhorAcerto: melhor,
+          linhaReal: flReal,
+          colunaReal: fcReal,
+          somaReal,
+        });
+      }
+    });
+  }
+
+  const ranking: ResultadoPerfilTreino[] = acumulado
+    .map((acc) => {
+      const mediaMelhorAcerto = acc.somaMelhor / simulacoes;
+      const taxa11Mais = taxa(acc.onzeMais, simulacoes);
+      const taxa12Mais = taxa(acc.dozeMais, simulacoes);
+      const taxa13Mais = taxa(acc.trezeMais, simulacoes);
+      const taxa14Mais = taxa(acc.quatorzeMais, simulacoes);
+      const taxa15 = taxa(acc.quinze, simulacoes);
+      const coberturaLinha = taxa(acc.linha, simulacoes);
+      const coberturaColuna = taxa(acc.coluna, simulacoes);
+      const coberturaSoma = taxa(acc.soma, simulacoes);
+      const coberturaLinhaColuna = taxa(acc.linhaColuna, simulacoes);
+      const score =
+        mediaMelhorAcerto * 100 +
+        taxa(acc.dezMais, simulacoes) * 18 +
+        taxa11Mais * 35 +
+        taxa12Mais * 70 +
+        taxa13Mais * 140 +
+        taxa14Mais * 260 +
+        taxa15 * 500 +
+        coberturaLinhaColuna * 22 +
+        coberturaSoma * 10;
+
+      return {
+        perfil: acc.perfil,
+        simulacoes,
+        mediaMelhorAcerto,
+        maxAcerto: acc.maxAcerto,
+        taxa10Mais: taxa(acc.dezMais, simulacoes),
+        taxa11Mais,
+        taxa12Mais,
+        taxa13Mais,
+        taxa14Mais,
+        taxa15,
+        coberturaLinha,
+        coberturaColuna,
+        coberturaSoma,
+        coberturaLinhaColuna,
+        score,
+      };
+    })
+    .sort((a, b) => b.score - a.score);
+
+  const vencedor = ranking[0].perfil;
+  const topExemplos = exemplos
+    .sort((a, b) => b.melhorAcerto - a.melhorAcerto || b.concurso - a.concurso)
+    .slice(0, 8);
+
+  const conclusao =
+    `Foram simulados ${simulacoes} concursos passados em modo walk-forward: ` +
+    `para cada concurso, a IA usou somente os ${retros} anteriores e conferiu as 5 fichas contra o resultado real. ` +
+    `O perfil vencedor foi "${vencedor.nome}" por média de acertos, picos de 12+ e cobertura de linha/coluna/soma.`;
+
+  return {
+    retros,
+    simulacoes,
+    concursoInicio: ord[inicio].c,
+    concursoFim: ord[ord.length - 1].c,
+    perfilVencedor: vencedor,
+    ranking,
+    exemplos: topExemplos,
+    conclusao,
   };
 }

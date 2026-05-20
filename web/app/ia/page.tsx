@@ -8,7 +8,7 @@ import {
   calcVar, csn, dezenasDe, enumerar, formatoColuna, formatoLinha, spq,
 } from "@/lib/lottery";
 import { cn } from "@/lib/utils";
-import type { Sugestao } from "@/lib/insights";
+import type { Sugestao, TreinamentoIA } from "@/lib/insights";
 
 const FICHAS_FIXAS = 5;
 
@@ -24,6 +24,7 @@ export default function IA() {
   const [narrativa, setNarrativa] = useState<string | null>(null);
   const [confianca, setConfianca] = useState<string | null>(null);
   const [intuicao, setIntuicao] = useState<string | null>(null);
+  const [treinamento, setTreinamento] = useState<TreinamentoIA | null>(null);
   const [multiJ, setMultiJ] = useState<{
     spq: { mediaDasMedias: number; desvioDasMedias: number };
     csn: { mediaDasMedias: number; desvioDasMedias: number };
@@ -35,6 +36,8 @@ export default function IA() {
   const [usarLLM, setUsarLLM] = useState(true);
 
   // Jogos gerados a partir da sugestão
+  const [fichasIA, setFichasIA] = useState<number[][]>([]);
+  const [totalGeradoIA, setTotalGeradoIA] = useState<number | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [saveOk, setSaveOk] = useState<number | null>(null);
 
@@ -77,7 +80,14 @@ export default function IA() {
   const analisar = async () => {
     if (hist.length === 0) return;
     setLoading(true);
-    setSug(null); setNarrativa(null); setConfianca(null); setIntuicao(null); setMultiJ(null);
+    setSug(null);
+    setNarrativa(null);
+    setConfianca(null);
+    setIntuicao(null);
+    setTreinamento(null);
+    setMultiJ(null);
+    setFichasIA([]);
+    setTotalGeradoIA(null);
     try {
       const endpoint = usarLLM ? "/api/ia/anthropic" : "/api/ia/sugestao";
       const r = await fetch(endpoint, {
@@ -89,14 +99,16 @@ export default function IA() {
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error ?? "erro");
+      const sugestao = data.sugestao ?? data;
+      setSug(sugestao);
+      setTreinamento(data.treinamento ?? null);
+      setFichasIA(data.carteira?.jogos ?? data.fichas ?? []);
+      setTotalGeradoIA(data.carteira?.totalGerado ?? null);
       if (usarLLM) {
-        setSug(data.sugestao);
         setNarrativa(data.narrativa);
         setConfianca(data.confianca);
         setIntuicao(data.intuicao);
         setMultiJ(data.multiJanela);
-      } else {
-        setSug(data);
       }
     } catch (e) {
       console.error(e);
@@ -118,6 +130,7 @@ export default function IA() {
   // Ranking automático: 5 fichas finais. A seleção combina ajuste estatístico,
   // variáveis clássicas, quentes/atrasadas e diversidade entre fichas.
   const fichasSelecionadas: number[][] = useMemo(() => {
+    if (fichasIA.length > 0) return fichasIA;
     if (!sug || jogosCompletos.length === 0) return [];
     const N = Math.max(1, Math.min(FICHAS_FIXAS, jogosCompletos.length));
     const ultimo = hist.length ? new Set(hist[hist.length - 1].dez) : new Set<number>();
@@ -206,7 +219,9 @@ export default function IA() {
     }
 
     return out;
-  }, [sug, jogosCompletos, hist]);
+  }, [fichasIA, sug, jogosCompletos, hist]);
+
+  const totalJogosPossiveis = totalGeradoIA ?? jogosCompletos.length;
 
   const baixarTxt = () => {
     if (fichasSelecionadas.length === 0) return;
@@ -242,8 +257,16 @@ export default function IA() {
             faixa_coluna_csn: [sug?.coluna?.csn.sugMin, sug?.coluna?.csn.sugMax],
             linhas: sug?.topLinhas.map((f) => f.fmt) ?? [],
             colunas: sug?.topColunas.map((f) => f.fmt) ?? [],
-            n_total_gerado: jogosCompletos.length,
+            n_total_gerado: totalJogosPossiveis,
             n_fichas_finais: FICHAS_FIXAS,
+            treinamento: treinamento ? {
+              simulacoes: treinamento.simulacoes,
+              concurso_inicio: treinamento.concursoInicio,
+              concurso_fim: treinamento.concursoFim,
+              perfil_vencedor: treinamento.perfilVencedor.nome,
+              media_melhor_acerto: treinamento.ranking[0]?.mediaMelhorAcerto,
+              max_acerto: treinamento.ranking[0]?.maxAcerto,
+            } : null,
             criterio: "IA automática: score estatístico composto + diversidade de portfólio",
           },
           jogos: fichasSelecionadas,
@@ -385,6 +408,64 @@ export default function IA() {
         </div>
       )}
 
+      {treinamento && (
+        <>
+          <SectionTitle>Treinamento no passado</SectionTitle>
+          <div className="bg-white border border-[#DDE8EC] rounded-2xl p-5 mb-6 shadow-sm">
+            <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
+              <div>
+                <div className="text-[10.5px] uppercase tracking-wider font-extrabold text-[#5C7080]">
+                  Walk-forward
+                </div>
+                <div className="mt-1 text-sm text-[#1A2A3A] leading-relaxed max-w-3xl">
+                  {treinamento.conclusao}
+                </div>
+              </div>
+              <div className="rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-3 min-w-[210px]">
+                <div className="text-[10px] uppercase tracking-wider font-extrabold text-emerald-700">Perfil vencedor</div>
+                <div className="font-extrabold text-emerald-900">{treinamento.perfilVencedor.nome}</div>
+                <div className="text-[11px] text-emerald-800 mt-1">{treinamento.perfilVencedor.descricao}</div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
+              <TreinoMetric label="Simulações" value={treinamento.simulacoes.toString()} sub={`${treinamento.concursoInicio} a ${treinamento.concursoFim}`} />
+              <TreinoMetric label="Média melhor acerto" value={treinamento.ranking[0]?.mediaMelhorAcerto.toFixed(2) ?? "0"} sub="nas 5 fichas" />
+              <TreinoMetric label="Máximo" value={(treinamento.ranking[0]?.maxAcerto ?? 0).toString()} sub="melhor pico" />
+              <TreinoMetric label="11+ pontos" value={`${((treinamento.ranking[0]?.taxa11Mais ?? 0) * 100).toFixed(1)}%`} sub="simulações" />
+              <TreinoMetric label="12+ pontos" value={`${((treinamento.ranking[0]?.taxa12Mais ?? 0) * 100).toFixed(1)}%`} sub="simulações" />
+            </div>
+
+            <div className="overflow-x-auto rounded-xl border border-[#DDE8EC]">
+              <table className="w-full text-sm">
+                <thead className="bg-[#F4F8FA]">
+                  <tr>
+                    {["Perfil", "Média", "Máx", "10+", "11+", "12+", "Linha+Coluna"].map((h) => (
+                      <th key={h} className="px-3 py-2 text-[10px] uppercase tracking-wider font-extrabold text-[#5C7080] text-center">
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {treinamento.ranking.slice(0, 5).map((r, i) => (
+                    <tr key={r.perfil.id} className={cn("border-t border-[#F2F6F8]", i === 0 && "bg-emerald-50/60")}>
+                      <td className="px-3 py-2 font-bold text-[#1A2A3A]">{r.perfil.nome}</td>
+                      <td className="px-3 py-2 text-center tabular-nums font-bold">{r.mediaMelhorAcerto.toFixed(2)}</td>
+                      <td className="px-3 py-2 text-center tabular-nums">{r.maxAcerto}</td>
+                      <td className="px-3 py-2 text-center tabular-nums">{(r.taxa10Mais * 100).toFixed(1)}%</td>
+                      <td className="px-3 py-2 text-center tabular-nums">{(r.taxa11Mais * 100).toFixed(1)}%</td>
+                      <td className="px-3 py-2 text-center tabular-nums">{(r.taxa12Mais * 100).toFixed(1)}%</td>
+                      <td className="px-3 py-2 text-center tabular-nums">{(r.coberturaLinhaColuna * 100).toFixed(1)}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
+
       {sug && (
         <>
           <SectionTitle>Sugestão da IA</SectionTitle>
@@ -466,10 +547,10 @@ export default function IA() {
                     <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-500 to-cyan-700 flex items-center justify-center text-white">
                       <Dices size={22}/>
                     </div>
-                    <div>
-                      <div className="text-sm text-[#5C7080]">Combinações geradas com sua sugestão</div>
-                      <div className="text-2xl font-extrabold tabular-nums">
-                        {jogosCompletos.length.toLocaleString("pt-BR")} jogos possíveis
+                      <div>
+                        <div className="text-sm text-[#5C7080]">Combinações geradas com sua sugestão</div>
+                        <div className="text-2xl font-extrabold tabular-nums">
+                        {totalJogosPossiveis.toLocaleString("pt-BR")} jogos possíveis
                       </div>
                     </div>
                   </div>
@@ -484,10 +565,9 @@ export default function IA() {
                     <ShieldCheck size={15} />
                     {fichasSelecionadas.length} melhores fichas finais
                   </div>
-                  A seleção é automática: o sistema ranqueia todos os jogos possíveis por encaixe em Linha/SPQ, Linha/CSN,
-                  Coluna/SPQ, Coluna/CSN e Soma, pondera dezenas quentes e atrasadas, aplica filtros clássicos
-                  (pares, bordas, modais, primos, Fibonacci e repetição do último) e escolhe uma carteira final com diversidade
-                  entre fichas.
+                  A seleção é automática: primeiro o sistema testa metodologias em concursos passados, escolhe o perfil vencedor
+                  e só então ranqueia os jogos atuais por Linha/SPQ, Linha/CSN, Coluna/SPQ, Coluna/CSN, Soma, variáveis clássicas,
+                  dezenas quentes/atrasadas e diversidade entre fichas.
                 </div>
 
                 {/* Legenda */}
@@ -655,6 +735,20 @@ function FaixaCard({ titulo, min, max, media, ultima, centralidade, razao }: {
       <p className="text-xs text-[#5C7080] leading-snug border-t border-[#F2F6F8] pt-3">
         {razao}
       </p>
+    </div>
+  );
+}
+
+function TreinoMetric({ label, value, sub }: {
+  label: string;
+  value: string;
+  sub: string;
+}) {
+  return (
+    <div className="rounded-xl border border-[#DDE8EC] bg-[#FBFDFE] px-4 py-3">
+      <div className="text-[10px] uppercase tracking-wider font-extrabold text-[#5C7080]">{label}</div>
+      <div className="mt-1 text-xl font-extrabold tabular-nums text-[#0F1B2D]">{value}</div>
+      <div className="text-[10px] font-semibold text-[#5C7080]">{sub}</div>
     </div>
   );
 }

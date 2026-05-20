@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { sugerir, analiseMultiJanela } from "@/lib/insights";
+import { gerarCarteiraIA, sugerir, analiseMultiJanela, treinarMetodologiaIA } from "@/lib/insights";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -17,17 +17,30 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "historico vazio" }, { status: 400 });
     }
 
-    // 1) Análise heurística (TS puro)
-    const sug = sugerir(historico, alvoJogos, pesoTendencia);
+    // 1) Walk-forward: testa perfis no passado sem olhar o futuro
+    const treinamento = treinarMetodologiaIA(historicoLongo, historico.length, alvoJogos);
+    const perfil = treinamento?.perfilVencedor;
 
-    // 2) Análise multi-janela sobre todo o histórico longo (valida tendência)
+    // 2) Análise heurística final usando o perfil vencedor do backtest
+    const sug = sugerir(
+      historico,
+      alvoJogos,
+      perfil?.pesoTendencia ?? pesoTendencia,
+      perfil ? { larguraFaixa: perfil.larguraFaixa, qtdFormatos: perfil.qtdFormatos } : {}
+    );
+    const carteira = gerarCarteiraIA(historico, sug, perfil, alvoJogos);
+
+    // 3) Análise multi-janela sobre todo o histórico longo (valida tendência)
     const mj = analiseMultiJanela(historicoLongo, 30);
 
-    // 3) Chama Claude para narrativa + validação
+    // 4) Chama Claude para narrativa + validação
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
       return NextResponse.json({
         sugestao: sug,
+        treinamento,
+        carteira,
+        fichas: carteira.jogos,
         multiJanela: mj,
         narrativa: "Análise heurística pura (ANTHROPIC_API_KEY não configurada). " +
           "Para narrativa em linguagem natural, configure a chave em Vercel → Settings → Env Vars.",
@@ -51,6 +64,17 @@ VALIDAÇÃO MULTI-JANELA (${mj.janelas.length} janelas de 30 concursos sobre his
 - Soma média das médias: ${mj.soma.mediaDasMedias.toFixed(0)} (centro teórico = 195)
 - Conclusão: ${mj.conclusao}
 
+TREINAMENTO WALK-FORWARD:
+- Simulações: ${treinamento?.simulacoes ?? 0} concursos passados (${treinamento?.concursoInicio ?? "-"} a ${treinamento?.concursoFim ?? "-"})
+- Regra: para cada concurso passado, foram usados apenas os ${historico.length} concursos anteriores; depois as 5 fichas foram conferidas contra o resultado real.
+- Perfil vencedor: ${treinamento?.perfilVencedor.nome ?? "sem treinamento"} — ${treinamento?.perfilVencedor.descricao ?? ""}
+- Ranking: ${(treinamento?.ranking ?? []).slice(0, 4).map(r =>
+  `${r.perfil.nome}: média melhor acerto ${r.mediaMelhorAcerto.toFixed(2)}, máx ${r.maxAcerto}, 11+ ${(r.taxa11Mais*100).toFixed(1)}%, 12+ ${(r.taxa12Mais*100).toFixed(1)}%, linha/coluna ${(r.coberturaLinhaColuna*100).toFixed(1)}%`
+).join(" | ")}
+- Melhores exemplos: ${(treinamento?.exemplos ?? []).slice(0, 5).map(e =>
+  `${e.concurso}: ${e.melhorAcerto} pontos (${e.perfil})`
+).join(", ") || "nenhum 12+ nas simulações"}
+
 SUGESTÃO HEURÍSTICA:
 - Linha/SPQ: [${sug.linha.spq.sugMin}, ${sug.linha.spq.sugMax}]
 - Linha/CSN: [${sug.linha.csn.sugMin}, ${sug.linha.csn.sugMax}]
@@ -64,10 +88,11 @@ SUGESTÃO HEURÍSTICA:
 
 TAREFA:
 1. Em até 5 frases curtas em PORTUGUÊS, explique a tomada de decisão de forma clara e segura, falando como um analista experiente.
-2. Mencione se a tendência ao centro foi CONFIRMADA pela análise multi-janela.
-3. Comente se há sinais de "intuição" (atrasos extremos, formatos esquecidos, padrões emergentes que merecem atenção).
-4. Confirme ou ajuste levemente a sugestão separando linha e coluna quando fizer sentido — mas SEMPRE seja honesto: se for puramente probabilidade independente, diga.
+2. Explique que a metodologia vencedora foi escolhida por simulação no passado, não por palpite.
+3. Mencione se a tendência ao centro foi CONFIRMADA pela análise multi-janela.
+4. Comente se há sinais de "intuição" (atrasos extremos, formatos esquecidos, padrões emergentes que merecem atenção).
 5. O programa vai entregar EXATAMENTE 5 fichas finais; não sugira que o usuário escolha quantidade manualmente.
+6. Seja honesto: não prometa acerto perfeito nem 15 pontos garantidos.
 
 Responda em JSON:
 {
@@ -106,6 +131,9 @@ Responda em JSON:
 
     return NextResponse.json({
       sugestao: sug,
+      treinamento,
+      carteira,
+      fichas: carteira.jogos,
       multiJanela: mj,
       narrativa: parsed.narrativa ?? txt,
       ajustesSugeridos: parsed.ajustesSugeridos ?? null,

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { sugerir } from "@/lib/insights";
+import { gerarCarteiraIA, sugerir, treinarMetodologiaIA } from "@/lib/insights";
 
 export const dynamic = "force-dynamic";
 
@@ -7,6 +7,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const historico: { c: number; dez: number[] }[] = body.historico ?? [];
+    const historicoLongo: { c: number; dez: number[] }[] = body.historicoLongo ?? historico;
     const alvoJogos = 5;
     const pesoTendencia = body.pesoTendencia ?? 0.6;
 
@@ -16,8 +17,22 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
-    const sug = sugerir(historico, alvoJogos, pesoTendencia);
-    return NextResponse.json(sug);
+    const treinamento = treinarMetodologiaIA(historicoLongo, historico.length, alvoJogos);
+    const perfil = treinamento?.perfilVencedor;
+    const sug = sugerir(
+      historico,
+      alvoJogos,
+      perfil?.pesoTendencia ?? pesoTendencia,
+      perfil ? { larguraFaixa: perfil.larguraFaixa, qtdFormatos: perfil.qtdFormatos } : {}
+    );
+    const carteira = gerarCarteiraIA(historico, sug, perfil, alvoJogos);
+
+    return NextResponse.json({
+      sugestao: sug,
+      treinamento,
+      carteira,
+      fichas: carteira.jogos,
+    });
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "erro" },
