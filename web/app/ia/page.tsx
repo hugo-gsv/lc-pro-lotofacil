@@ -15,7 +15,6 @@ const FICHAS_FIXAS = 5;
 export default function IA() {
   const [conc, setConc] = useState(3674);
   const [retros, setRetros] = useState(30);
-  const [pesoTendencia, setPeso] = useState(0.6);
 
   const [hist, setHist] = useState<{ c: number; dez: number[] }[]>([]);
   const [histLongo, setHistLongo] = useState<{ c: number; dez: number[] }[]>([]);
@@ -94,7 +93,7 @@ export default function IA() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          historico: hist, historicoLongo: histLongo, fichasFinais: FICHAS_FIXAS, pesoTendencia,
+          historico: hist, historicoLongo: histLongo, fichasFinais: FICHAS_FIXAS,
         }),
       });
       const data = await r.json();
@@ -247,7 +246,8 @@ export default function IA() {
           tipo: "gerador",
           params: {
             origem: "IA Assistant",
-            concurso_alvo: conc, retros, peso_tendencia: pesoTendencia,
+            concurso_alvo: conc, retros,
+            perfil_ia: treinamento?.perfilVencedor.nome ?? "offline",
             spq: [sug?.spq.sugMin, sug?.spq.sugMax],
             csn: [sug?.csn.sugMin, sug?.csn.sugMax],
             soma: [sug?.soma.sugMin, sug?.soma.sugMax],
@@ -302,12 +302,10 @@ export default function IA() {
               className="w-full bg-cyan-50 border border-cyan-100 rounded-lg px-3 py-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-cyan-300" />
           </div>
           <div className="md:col-span-3">
-            <label className="block text-xs font-semibold uppercase tracking-wider text-[#5C7080] mb-1">
-              Peso da tendência (centro): {(pesoTendencia * 100).toFixed(0)}%
-            </label>
-            <input type="range" min="0" max="1" step="0.1" value={pesoTendencia}
-              onChange={(e) => setPeso(parseFloat(e.target.value))}
-              className="w-full accent-cyan-600" />
+            <div className="rounded-xl border border-cyan-200 bg-cyan-50 px-3 py-2">
+              <div className="text-[10px] font-extrabold uppercase tracking-wider text-cyan-700">Metodologia</div>
+              <div className="mt-0.5 text-sm font-extrabold text-cyan-950">Perfil offline calibrado</div>
+            </div>
           </div>
           <div className="md:col-span-2">
             <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2">
@@ -335,8 +333,7 @@ export default function IA() {
           </div>
         </div>
         <p className="mt-3 text-[11px] text-[#5C7080]">
-          <strong>Tendência ao centro:</strong> 0% = só média histórica · 100% = força regressão ao centro teórico (SPQ 45, CSN 320, Soma 195).
-          Recomendado: 60%.
+          <strong>IA:</strong> o backtest fica pré-calibrado no código. Ao analisar, o site só aplica o perfil treinado offline e entrega exatamente 5 fichas.
         </p>
         <label className="mt-3 flex items-center gap-2 text-xs font-semibold cursor-pointer">
           <input
@@ -410,12 +407,12 @@ export default function IA() {
 
       {treinamento && (
         <>
-          <SectionTitle>Treinamento no passado</SectionTitle>
+          <SectionTitle>Treinamento offline</SectionTitle>
           <div className="bg-white border border-[#DDE8EC] rounded-2xl p-5 mb-6 shadow-sm">
             <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
               <div>
                 <div className="text-[10.5px] uppercase tracking-wider font-extrabold text-[#5C7080]">
-                  Walk-forward
+                  Pré-treinamento local
                 </div>
                 <div className="mt-1 text-sm text-[#1A2A3A] leading-relaxed max-w-3xl">
                   {treinamento.conclusao}
@@ -565,9 +562,8 @@ export default function IA() {
                     <ShieldCheck size={15} />
                     {fichasSelecionadas.length} melhores fichas finais
                   </div>
-                  A seleção é automática: primeiro o sistema testa metodologias em concursos passados, escolhe o perfil vencedor
-                  e só então ranqueia os jogos atuais por Linha/SPQ, Linha/CSN, Coluna/SPQ, Coluna/CSN, Soma, variáveis clássicas,
-                  dezenas quentes/atrasadas e diversidade entre fichas.
+                  A seleção é automática: o site aplica o perfil pré-treinado offline e ranqueia os jogos atuais por Linha/SPQ,
+                  Linha/CSN, Coluna/SPQ, Coluna/CSN, Soma, variáveis clássicas, dezenas quentes/atrasadas e diversidade entre fichas.
                 </div>
 
                 {/* Legenda */}

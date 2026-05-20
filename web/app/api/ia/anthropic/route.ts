@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { gerarCarteiraIA, sugerir, analiseMultiJanela, treinarMetodologiaIA } from "@/lib/insights";
+import {
+  analiseMultiJanela,
+  gerarCarteiraIA,
+  PERFIL_TREINADO_IA,
+  sugerir,
+  TREINAMENTO_OFFLINE_IA,
+} from "@/lib/insights";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -11,22 +17,21 @@ export async function POST(req: NextRequest) {
     const historico: { c: number; dez: number[] }[] = body.historico ?? [];
     const historicoLongo: { c: number; dez: number[] }[] = body.historicoLongo ?? historico;
     const alvoJogos = 5;
-    const pesoTendencia = body.pesoTendencia ?? 0.6;
 
     if (!Array.isArray(historico) || historico.length === 0) {
       return NextResponse.json({ error: "historico vazio" }, { status: 400 });
     }
 
-    // 1) Walk-forward: testa perfis no passado sem olhar o futuro
-    const treinamento = treinarMetodologiaIA(historicoLongo, historico.length, alvoJogos);
-    const perfil = treinamento?.perfilVencedor;
+    // 1) Perfil calibrado offline. O site não roda backtest a cada clique.
+    const treinamento = TREINAMENTO_OFFLINE_IA;
+    const perfil = PERFIL_TREINADO_IA;
 
-    // 2) Análise heurística final usando o perfil vencedor do backtest
+    // 2) Análise heurística final usando o perfil vencedor do backtest offline
     const sug = sugerir(
       historico,
       alvoJogos,
-      perfil?.pesoTendencia ?? pesoTendencia,
-      perfil ? { larguraFaixa: perfil.larguraFaixa, qtdFormatos: perfil.qtdFormatos } : {}
+      perfil.pesoTendencia,
+      { larguraFaixa: perfil.larguraFaixa, qtdFormatos: perfil.qtdFormatos }
     );
     const carteira = gerarCarteiraIA(historico, sug, perfil, alvoJogos);
 
@@ -64,16 +69,15 @@ VALIDAÇÃO MULTI-JANELA (${mj.janelas.length} janelas de 30 concursos sobre his
 - Soma média das médias: ${mj.soma.mediaDasMedias.toFixed(0)} (centro teórico = 195)
 - Conclusão: ${mj.conclusao}
 
-TREINAMENTO WALK-FORWARD:
+TREINAMENTO OFFLINE PRÉ-CALCULADO:
 - Simulações: ${treinamento?.simulacoes ?? 0} concursos passados (${treinamento?.concursoInicio ?? "-"} a ${treinamento?.concursoFim ?? "-"})
-- Regra: para cada concurso passado, foram usados apenas os ${historico.length} concursos anteriores; depois as 5 fichas foram conferidas contra o resultado real.
+- Regra: para cada concurso passado, foram usados apenas concursos anteriores; depois as 5 fichas foram conferidas contra o resultado real.
+- Esse treinamento foi feito offline/localmente e NÃO roda a cada análise do site.
 - Perfil vencedor: ${treinamento?.perfilVencedor.nome ?? "sem treinamento"} — ${treinamento?.perfilVencedor.descricao ?? ""}
 - Ranking: ${(treinamento?.ranking ?? []).slice(0, 4).map(r =>
-  `${r.perfil.nome}: média melhor acerto ${r.mediaMelhorAcerto.toFixed(2)}, máx ${r.maxAcerto}, 11+ ${(r.taxa11Mais*100).toFixed(1)}%, 12+ ${(r.taxa12Mais*100).toFixed(1)}%, linha/coluna ${(r.coberturaLinhaColuna*100).toFixed(1)}%`
+  `${r.perfil.nome}: média melhor acerto ${r.mediaMelhorAcerto.toFixed(2)}, máx ${r.maxAcerto}, 11+ ${(r.taxa11Mais*100).toFixed(1)}%, 12+ ${(r.taxa12Mais*100).toFixed(1)}%, 13+ ${(r.taxa13Mais*100).toFixed(1)}%, 15 ${(r.taxa15*100).toFixed(1)}%`
 ).join(" | ")}
-- Melhores exemplos: ${(treinamento?.exemplos ?? []).slice(0, 5).map(e =>
-  `${e.concurso}: ${e.melhorAcerto} pontos (${e.perfil})`
-).join(", ") || "nenhum 12+ nas simulações"}
+- Observação honesta: o melhor perfil chegou a 13 pontos no período testado; não foi encontrada metodologia com 15 pontos nas 5 fichas.
 
 SUGESTÃO HEURÍSTICA:
 - Linha/SPQ: [${sug.linha.spq.sugMin}, ${sug.linha.spq.sugMax}]

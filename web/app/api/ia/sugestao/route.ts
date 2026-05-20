@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { gerarCarteiraIA, sugerir, treinarMetodologiaIA } from "@/lib/insights";
+import { gerarCarteiraIA, PERFIL_TREINADO_IA, sugerir, TREINAMENTO_OFFLINE_IA } from "@/lib/insights";
 
 export const dynamic = "force-dynamic";
 
@@ -7,9 +7,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const historico: { c: number; dez: number[] }[] = body.historico ?? [];
-    const historicoLongo: { c: number; dez: number[] }[] = body.historicoLongo ?? historico;
     const alvoJogos = 5;
-    const pesoTendencia = body.pesoTendencia ?? 0.6;
 
     if (!Array.isArray(historico) || historico.length === 0) {
       return NextResponse.json(
@@ -17,19 +15,18 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
-    const treinamento = treinarMetodologiaIA(historicoLongo, historico.length, alvoJogos);
-    const perfil = treinamento?.perfilVencedor;
+    const perfil = PERFIL_TREINADO_IA;
     const sug = sugerir(
       historico,
       alvoJogos,
-      perfil?.pesoTendencia ?? pesoTendencia,
-      perfil ? { larguraFaixa: perfil.larguraFaixa, qtdFormatos: perfil.qtdFormatos } : {}
+      perfil.pesoTendencia,
+      { larguraFaixa: perfil.larguraFaixa, qtdFormatos: perfil.qtdFormatos }
     );
     const carteira = gerarCarteiraIA(historico, sug, perfil, alvoJogos);
 
     return NextResponse.json({
       sugestao: sug,
-      treinamento,
+      treinamento: TREINAMENTO_OFFLINE_IA,
       carteira,
       fichas: carteira.jogos,
     });

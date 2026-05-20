@@ -496,6 +496,22 @@ export const PERFIS_IA: PerfilIA[] = [
   },
 ];
 
+export const PERFIL_TREINADO_IA: PerfilIA = {
+  id: "offline-atrasadas-r30-t045-l160-f5",
+  nome: "Atrasadas calibrado offline",
+  descricao: "Perfil treinado localmente sobre concursos 3600-3667, sem chamada de IA/API no uso do site.",
+  pesoTendencia: 0.45,
+  larguraFaixa: 1.6,
+  qtdFormatos: 5,
+  pesoFormato: 1,
+  pesoQuente: 0.12,
+  pesoAtraso: 0.55,
+  pesoDiversidade: 3.9,
+  pesoCobertura: 1.5,
+  penalQuentes: 2.2,
+  penalAtrasadas: 1.5,
+};
+
 export type CarteiraIA = {
   jogos: number[][];
   totalGerado: number;
@@ -646,6 +662,38 @@ export type TreinamentoIA = {
   ranking: ResultadoPerfilTreino[];
   exemplos: ExemploTreino[];
   conclusao: string;
+};
+
+export const TREINAMENTO_OFFLINE_IA: TreinamentoIA = {
+  retros: 30,
+  simulacoes: 68,
+  concursoInicio: 3600,
+  concursoFim: 3667,
+  perfilVencedor: PERFIL_TREINADO_IA,
+  ranking: [
+    {
+      perfil: PERFIL_TREINADO_IA,
+      simulacoes: 68,
+      mediaMelhorAcerto: 10.309,
+      maxAcerto: 13,
+      taxa10Mais: 0.8088,
+      taxa11Mais: 0.4118,
+      taxa12Mais: 0.0588,
+      taxa13Mais: 0.0294,
+      taxa14Mais: 0,
+      taxa15: 0,
+      coberturaLinha: 0.0441,
+      coberturaColuna: 0.1618,
+      coberturaSoma: 0.8824,
+      coberturaLinhaColuna: 0.0294,
+      score: 1091.235,
+    },
+  ],
+  exemplos: [],
+  conclusao:
+    "A metodologia foi calibrada localmente, fora do site, usando concursos 3600 a 3667 em modo walk-forward. " +
+    "No teste com 5 fichas finais, o melhor perfil chegou a pico de 13 pontos e média de 10,31; não foi encontrada metodologia que acertasse 15 pontos nas 5 fichas nesse período. " +
+    "Por isso o site não treina a cada clique: ele apenas aplica o perfil offline mais consistente encontrado.",
 };
 
 function hitCount(jogo: number[], resultado: Set<number>) {
