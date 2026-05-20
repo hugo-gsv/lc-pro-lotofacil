@@ -10,7 +10,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const historico: { c: number; dez: number[] }[] = body.historico ?? [];
     const historicoLongo: { c: number; dez: number[] }[] = body.historicoLongo ?? historico;
-    const alvoJogos = body.alvoJogos ?? 10;
+    const alvoJogos = 5;
     const pesoTendencia = body.pesoTendencia ?? 0.6;
 
     if (!Array.isArray(historico) || historico.length === 0) {
@@ -39,8 +39,10 @@ export async function POST(req: NextRequest) {
     const prompt = `Você é um especialista em análise estatística da Lotofácil brasileira. Analisei ${historico.length} concursos recentes e ${historicoLongo.length} concursos para validar tendência. Aqui estão os dados:
 
 ANÁLISE DE SÉRIE (últimos ${historico.length} concursos):
-- SPQ: média ${sug.spq.media.toFixed(1)}, desvio ${sug.spq.desvio.toFixed(1)}, últimos 5 = ${sug.spq.ultimaTendencia.toFixed(1)}, centralidade ${(sug.spq.centralidade*100).toFixed(0)}%
-- CSN: média ${sug.csn.media.toFixed(0)}, desvio ${sug.csn.desvio.toFixed(0)}, últimos 5 = ${sug.csn.ultimaTendencia.toFixed(0)}
+- Linha/SPQ: média ${sug.linha.spq.media.toFixed(1)}, desvio ${sug.linha.spq.desvio.toFixed(1)}, últimos 5 = ${sug.linha.spq.ultimaTendencia.toFixed(1)}, centralidade ${(sug.linha.spq.centralidade*100).toFixed(0)}%
+- Linha/CSN: média ${sug.linha.csn.media.toFixed(0)}, desvio ${sug.linha.csn.desvio.toFixed(0)}, últimos 5 = ${sug.linha.csn.ultimaTendencia.toFixed(0)}
+- Coluna/SPQ: média ${sug.coluna.spq.media.toFixed(1)}, desvio ${sug.coluna.spq.desvio.toFixed(1)}, últimos 5 = ${sug.coluna.spq.ultimaTendencia.toFixed(1)}, centralidade ${(sug.coluna.spq.centralidade*100).toFixed(0)}%
+- Coluna/CSN: média ${sug.coluna.csn.media.toFixed(0)}, desvio ${sug.coluna.csn.desvio.toFixed(0)}, últimos 5 = ${sug.coluna.csn.ultimaTendencia.toFixed(0)}
 - Soma: média ${sug.soma.media.toFixed(0)}, desvio ${sug.soma.desvio.toFixed(1)}, últimos 5 = ${sug.soma.ultimaTendencia.toFixed(0)}
 
 VALIDAÇÃO MULTI-JANELA (${mj.janelas.length} janelas de 30 concursos sobre histórico longo):
@@ -50,8 +52,10 @@ VALIDAÇÃO MULTI-JANELA (${mj.janelas.length} janelas de 30 concursos sobre his
 - Conclusão: ${mj.conclusao}
 
 SUGESTÃO HEURÍSTICA:
-- SPQ: [${sug.spq.sugMin}, ${sug.spq.sugMax}]
-- CSN: [${sug.csn.sugMin}, ${sug.csn.sugMax}]
+- Linha/SPQ: [${sug.linha.spq.sugMin}, ${sug.linha.spq.sugMax}]
+- Linha/CSN: [${sug.linha.csn.sugMin}, ${sug.linha.csn.sugMax}]
+- Coluna/SPQ: [${sug.coluna.spq.sugMin}, ${sug.coluna.spq.sugMax}]
+- Coluna/CSN: [${sug.coluna.csn.sugMin}, ${sug.coluna.csn.sugMax}]
 - Soma: [${sug.soma.sugMin}, ${sug.soma.sugMax}]
 - Top formatos linha: ${sug.topLinhas.map(f=>f.fmt).join(", ")}
 - Top formatos coluna: ${sug.topColunas.map(f=>f.fmt).join(", ")}
@@ -62,7 +66,8 @@ TAREFA:
 1. Em até 5 frases curtas em PORTUGUÊS, explique a tomada de decisão de forma clara e segura, falando como um analista experiente.
 2. Mencione se a tendência ao centro foi CONFIRMADA pela análise multi-janela.
 3. Comente se há sinais de "intuição" (atrasos extremos, formatos esquecidos, padrões emergentes que merecem atenção).
-4. Confirme ou ajuste levemente a sugestão (ex: "vale apertar SPQ para 43–47") — mas SEMPRE seja honesto: se for puramente probabilidade independente, diga.
+4. Confirme ou ajuste levemente a sugestão separando linha e coluna quando fizer sentido — mas SEMPRE seja honesto: se for puramente probabilidade independente, diga.
+5. O programa vai entregar EXATAMENTE 5 fichas finais; não sugira que o usuário escolha quantidade manualmente.
 
 Responda em JSON:
 {

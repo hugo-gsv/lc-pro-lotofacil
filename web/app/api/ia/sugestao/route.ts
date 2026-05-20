@@ -7,7 +7,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const historico: { c: number; dez: number[] }[] = body.historico ?? [];
-    const alvoJogos = body.alvoJogos ?? 10;
+    const alvoJogos = 5;
     const pesoTendencia = body.pesoTendencia ?? 0.6;
 
     if (!Array.isArray(historico) || historico.length === 0) {

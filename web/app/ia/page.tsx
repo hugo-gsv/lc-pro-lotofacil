@@ -1,20 +1,21 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Brain, Loader2, Wand2, ArrowRight, TrendingUp, Flame, Snowflake, Sparkle, Download, Save, Dices } from "lucide-react";
-import Link from "next/link";
+import { Brain, Loader2, Wand2, TrendingUp, Flame, Snowflake, Sparkle, Download, Save, Dices, ShieldCheck } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionTitle } from "@/components/ui/section-title";
-import { MetricCard } from "@/components/ui/metric-card";
-import { dezenasDe, enumerar } from "@/lib/lottery";
+import {
+  calcVar, csn, dezenasDe, enumerar, formatoColuna, formatoLinha, spq,
+} from "@/lib/lottery";
 import { cn } from "@/lib/utils";
 import type { Sugestao } from "@/lib/insights";
+
+const FICHAS_FIXAS = 5;
 
 export default function IA() {
   const [conc, setConc] = useState(3674);
   const [retros, setRetros] = useState(30);
   const [pesoTendencia, setPeso] = useState(0.6);
-  const [alvoJogos, setAlvo] = useState(10);
 
   const [hist, setHist] = useState<{ c: number; dez: number[] }[]>([]);
   const [histLongo, setHistLongo] = useState<{ c: number; dez: number[] }[]>([]);
@@ -34,8 +35,6 @@ export default function IA() {
   const [usarLLM, setUsarLLM] = useState(true);
 
   // Jogos gerados a partir da sugestão
-  const [fichasFinal, setFichasFinal] = useState(10);
-  const [modoSelecao, setModoSelecao] = useState<"quentes" | "atrasadas" | "equilibrado" | "diverso">("equilibrado");
   const [salvando, setSalvando] = useState(false);
   const [saveOk, setSaveOk] = useState<number | null>(null);
 
@@ -85,7 +84,7 @@ export default function IA() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          historico: hist, historicoLongo: histLongo, alvoJogos, pesoTendencia,
+          historico: hist, historicoLongo: histLongo, fichasFinais: FICHAS_FIXAS, pesoTendencia,
         }),
       });
       const data = await r.json();
@@ -107,23 +106,6 @@ export default function IA() {
     }
   };
 
-  const aplicar = () => {
-    if (!sug) return;
-    const params = new URLSearchParams({
-      target: conc.toString(),
-      retros: retros.toString(),
-      spqMin: sug.spq.sugMin.toString(),
-      spqMax: sug.spq.sugMax.toString(),
-      csnMin: sug.csn.sugMin.toString(),
-      csnMax: sug.csn.sugMax.toString(),
-      somaMin: sug.soma.sugMin.toString(),
-      somaMax: sug.soma.sugMax.toString(),
-      linhas: sug.topLinhas.map((f) => f.fmt).join(","),
-      colunas: sug.topColunas.map((f) => f.fmt).join(","),
-    });
-    window.location.href = `/gerador?${params.toString()}`;
-  };
-
   // === Geração automática de jogos a partir da sugestão ===
   const jogosCompletos: number[][] = useMemo(() => {
     if (!sug) return [];
@@ -133,10 +115,12 @@ export default function IA() {
     return enumerar(linhas, colunas, sug.soma.sugMin, sug.soma.sugMax);
   }, [sug]);
 
-  // Ranking conforme modo de seleção escolhido
+  // Ranking automático: 5 fichas finais. A seleção combina ajuste estatístico,
+  // variáveis clássicas, quentes/atrasadas e diversidade entre fichas.
   const fichasSelecionadas: number[][] = useMemo(() => {
     if (!sug || jogosCompletos.length === 0) return [];
-    const N = Math.max(1, Math.min(fichasFinal, jogosCompletos.length));
+    const N = Math.max(1, Math.min(FICHAS_FIXAS, jogosCompletos.length));
+    const ultimo = hist.length ? new Set(hist[hist.length - 1].dez) : new Set<number>();
 
     // Pesos auxiliares
     const pesoQuentes = new Map<number, number>();
@@ -144,108 +128,85 @@ export default function IA() {
     const pesoAtrasadas = new Map<number, number>();
     for (const d of sug.dezenasAtrasadas) pesoAtrasadas.set(d.dezena, d.atraso);
 
-    const scoreQuentes = (j: number[]) => j.reduce((s, d) => s + (pesoQuentes.get(d) ?? 0), 0);
-    const scoreAtrasadas = (j: number[]) => j.reduce((s, d) => s + (pesoAtrasadas.get(d) ?? 0), 0);
-    const scoreEquilibrado = (j: number[]) => scoreQuentes(j) * 0.6 + scoreAtrasadas(j) * 0.4;
+    const fmtLinhaScore = new Map(sug.topLinhas.map((f, i) => [f.fmt, 12 - i * 1.5 + f.freq * 2 + f.atraso * 0.35]));
+    const fmtColScore = new Map(sug.topColunas.map((f, i) => [f.fmt, 12 - i * 1.5 + f.freq * 2 + f.atraso * 0.35]));
 
-    if (modoSelecao === "quentes") {
-      return [...jogosCompletos]
-        .map((j) => ({ j, s: scoreQuentes(j) }))
-        .sort((a, b) => b.s - a.s)
-        .slice(0, N).map((x) => x.j);
-    }
+    const inRangeBonus = (value: number, min: number, max: number, bonus: number) =>
+      value >= min && value <= max ? bonus : -Math.min(10, Math.min(Math.abs(value - min), Math.abs(value - max)) * 0.8);
+    const bandBonus = (value: number, min: number, max: number, bonus: number) =>
+      value >= min && value <= max ? bonus : -Math.min(8, Math.min(Math.abs(value - min), Math.abs(value - max)) * 1.5);
 
-    if (modoSelecao === "atrasadas") {
-      return [...jogosCompletos]
-        .map((j) => ({ j, s: scoreAtrasadas(j) }))
-        .sort((a, b) => b.s - a.s)
-        .slice(0, N).map((x) => x.j);
-    }
+    const scoreBase = (j: number[]) => {
+      const fl = formatoLinha(j);
+      const fc = formatoColuna(j);
+      const soma = j.reduce((a, b) => a + b, 0);
+      const hot = j.reduce((s, d) => s + (pesoQuentes.get(d) ?? 0), 0);
+      const atraso = j.reduce((s, d) => s + (pesoAtrasadas.get(d) ?? 0), 0);
+      const nHot = j.filter((d) => pesoQuentes.has(d)).length;
+      const nAtr = j.filter((d) => pesoAtrasadas.has(d)).length;
+      const rep = calcVar("Repetição Último", j, ultimo);
+      const pares = calcVar("Pares", j);
+      const bordas = calcVar("Bordas", j);
+      const modas = calcVar("Modas", j);
+      const primos = calcVar("Primos", j);
+      const fib = calcVar("Fibonacci", j);
 
-    if (modoSelecao === "equilibrado") {
-      // Equilibrado: 40% top quentes + 40% top atrasadas + 20% aleatório,
-      // depois dedup
-      const nQ = Math.max(1, Math.round(N * 0.4));
-      const nA = Math.max(1, Math.round(N * 0.4));
-      const nR = Math.max(0, N - nQ - nA);
-      const ordQ = [...jogosCompletos]
-        .map((j) => ({ j, s: scoreQuentes(j) }))
-        .sort((a, b) => b.s - a.s)
-        .slice(0, nQ * 3).map((x) => x.j);
-      const ordA = [...jogosCompletos]
-        .map((j) => ({ j, s: scoreAtrasadas(j) }))
-        .sort((a, b) => b.s - a.s)
-        .slice(0, nA * 3).map((x) => x.j);
-      const out: number[][] = [];
-      const addUnique = (arr: number[][], max: number) => {
-        for (const j of arr) {
-          if (out.length >= N) break;
-          const key = j.join(",");
-          if (!out.some((x) => x.join(",") === key)) {
-            out.push(j);
-            if (max-- <= 0) break;
-          }
-        }
-      };
-      addUnique(ordQ, nQ);
-      addUnique(ordA, nA);
-      // resto: aleatório
-      const restantes = jogosCompletos.filter(
-        (j) => !out.some((x) => x.join(",") === j.join(","))
+      return (
+        (fmtLinhaScore.get(fl) ?? 0) +
+        (fmtColScore.get(fc) ?? 0) +
+        inRangeBonus(spq(fl), sug.linha?.spq.sugMin ?? sug.spq.sugMin, sug.linha?.spq.sugMax ?? sug.spq.sugMax, 10) +
+        inRangeBonus(csn(fl), sug.linha?.csn.sugMin ?? sug.csn.sugMin, sug.linha?.csn.sugMax ?? sug.csn.sugMax, 8) +
+        inRangeBonus(spq(fc), sug.coluna?.spq.sugMin ?? sug.spq.sugMin, sug.coluna?.spq.sugMax ?? sug.spq.sugMax, 10) +
+        inRangeBonus(csn(fc), sug.coluna?.csn.sugMin ?? sug.csn.sugMin, sug.coluna?.csn.sugMax ?? sug.csn.sugMax, 8) +
+        inRangeBonus(soma, sug.soma.sugMin, sug.soma.sugMax, 12) +
+        bandBonus(pares, 7, 8, 7) +
+        bandBonus(bordas, 9, 11, 6) +
+        bandBonus(modas, 8, 9, 6) +
+        bandBonus(primos, 5, 7, 4) +
+        bandBonus(fib, 3, 5, 4) +
+        bandBonus(rep, 7, 10, 5) +
+        hot * 0.22 +
+        atraso * 0.33 -
+        Math.max(0, nHot - 8) * 2.2 -
+        Math.max(0, nAtr - 5) * 1.5 -
+        Math.abs(soma - 195) * 0.12
       );
-      for (let i = restantes.length - 1; i > 0; i--) {
-        const r = Math.floor(Math.random() * (i + 1));
-        [restantes[i], restantes[r]] = [restantes[r], restantes[i]];
+    };
+
+    const hamming = (a: number[], b: number[]) => {
+      const sb = new Set(b);
+      let diff = 0;
+      for (const d of a) if (!sb.has(d)) diff++;
+      return diff;
+    };
+
+    const ranked = [...jogosCompletos]
+      .map((j) => ({ j, s: scoreBase(j) }))
+      .sort((a, b) => b.s - a.s)
+      .slice(0, Math.min(2500, jogosCompletos.length));
+
+    if (!ranked.length) return [];
+    const out: number[][] = [ranked[0].j];
+    const taken = new Set([ranked[0].j.join(",")]);
+
+    while (out.length < N) {
+      let best: { j: number[]; score: number } | null = null;
+      const coverage = new Set(out.flat());
+      for (const item of ranked) {
+        const key = item.j.join(",");
+        if (taken.has(key)) continue;
+        const minDist = Math.min(...out.map((o) => hamming(item.j, o)));
+        const newCoverage = item.j.filter((d) => !coverage.has(d)).length;
+        const portfolioScore = item.s + minDist * 3.8 + newCoverage * 1.4;
+        if (!best || portfolioScore > best.score) best = { j: item.j, score: portfolioScore };
       }
-      addUnique(restantes, nR);
-      return out.slice(0, N);
+      if (!best) break;
+      out.push(best.j);
+      taken.add(best.j.join(","));
     }
 
-    // diverso: greedy max-diversity (Hamming distance)
-    if (modoSelecao === "diverso") {
-      // Começa com a ficha de maior score equilibrado
-      const ranked = [...jogosCompletos]
-        .map((j) => ({ j, s: scoreEquilibrado(j) }))
-        .sort((a, b) => b.s - a.s);
-      const out: number[][] = [ranked[0].j];
-      const taken = new Set<string>([ranked[0].j.join(",")]);
-      while (out.length < N) {
-        let best: number[] | null = null;
-        let bestMinDist = -1;
-        // amostra para performance
-        const sample = ranked.slice(0, Math.min(ranked.length, 1000));
-        for (const { j } of sample) {
-          const k = j.join(",");
-          if (taken.has(k)) continue;
-          const setJ = new Set(j);
-          // distância mínima para qualquer já escolhida
-          let minDist = 99;
-          for (const o of out) {
-            let dist = 0;
-            for (const d of o) if (!setJ.has(d)) dist++;
-            if (dist < minDist) minDist = dist;
-            if (minDist === 0) break;
-          }
-          if (minDist > bestMinDist) {
-            bestMinDist = minDist;
-            best = j;
-            if (minDist === 15) break;
-          }
-        }
-        if (!best) break;
-        out.push(best);
-        taken.add(best.join(","));
-      }
-      return out;
-    }
-
-    return [];
-  }, [sug, jogosCompletos, fichasFinal, modoSelecao]);
-
-  // Sincroniza o alvo do início com fichasFinal quando análise termina
-  useEffect(() => {
-    if (sug) setFichasFinal(alvoJogos);
-  }, [sug]); // eslint-disable-line react-hooks/exhaustive-deps
+    return out;
+  }, [sug, jogosCompletos, hist]);
 
   const baixarTxt = () => {
     if (fichasSelecionadas.length === 0) return;
@@ -275,10 +236,15 @@ export default function IA() {
             spq: [sug?.spq.sugMin, sug?.spq.sugMax],
             csn: [sug?.csn.sugMin, sug?.csn.sugMax],
             soma: [sug?.soma.sugMin, sug?.soma.sugMax],
+            faixa_linha_spq: [sug?.linha?.spq.sugMin, sug?.linha?.spq.sugMax],
+            faixa_linha_csn: [sug?.linha?.csn.sugMin, sug?.linha?.csn.sugMax],
+            faixa_coluna_spq: [sug?.coluna?.spq.sugMin, sug?.coluna?.spq.sugMax],
+            faixa_coluna_csn: [sug?.coluna?.csn.sugMin, sug?.coluna?.csn.sugMax],
             linhas: sug?.topLinhas.map((f) => f.fmt) ?? [],
             colunas: sug?.topColunas.map((f) => f.fmt) ?? [],
             n_total_gerado: jogosCompletos.length,
-            n_fichas_finais: fichasSelecionadas.length,
+            n_fichas_finais: FICHAS_FIXAS,
+            criterio: "IA automática: score estatístico composto + diversidade de portfólio",
           },
           jogos: fichasSelecionadas,
         }),
@@ -321,9 +287,13 @@ export default function IA() {
               className="w-full accent-cyan-600" />
           </div>
           <div className="md:col-span-2">
-            <label className="block text-xs font-semibold uppercase tracking-wider text-[#5C7080] mb-1">Alvo de jogos</label>
-            <input type="number" value={alvoJogos} onChange={(e) => setAlvo(parseInt(e.target.value))}
-              className="w-full bg-cyan-50 border border-cyan-100 rounded-lg px-3 py-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-cyan-300" />
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2">
+              <div className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-700">Saída final</div>
+              <div className="mt-0.5 flex items-center gap-2 text-sm font-extrabold text-emerald-900">
+                <ShieldCheck size={15} />
+                5 fichas fixas
+              </div>
+            </div>
           </div>
           <div className="md:col-span-3">
             <button
@@ -418,20 +388,42 @@ export default function IA() {
       {sug && (
         <>
           <SectionTitle>Sugestão da IA</SectionTitle>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4 mb-6">
             <FaixaCard
-              titulo="SPQ"
-              min={sug.spq.sugMin} max={sug.spq.sugMax}
-              media={sug.spq.media} ultima={sug.spq.ultimaTendencia}
-              centralidade={sug.spq.centralidade}
-              razao={sug.spq.razao}
+              titulo="Linha SPQ"
+              min={sug.linha?.spq.sugMin ?? sug.spq.sugMin}
+              max={sug.linha?.spq.sugMax ?? sug.spq.sugMax}
+              media={sug.linha?.spq.media ?? sug.spq.media}
+              ultima={sug.linha?.spq.ultimaTendencia ?? sug.spq.ultimaTendencia}
+              centralidade={sug.linha?.spq.centralidade ?? sug.spq.centralidade}
+              razao={sug.linha?.spq.razao ?? sug.spq.razao}
             />
             <FaixaCard
-              titulo="CSN"
-              min={sug.csn.sugMin} max={sug.csn.sugMax}
-              media={sug.csn.media} ultima={sug.csn.ultimaTendencia}
-              centralidade={sug.csn.centralidade}
-              razao={sug.csn.razao}
+              titulo="Linha CSN"
+              min={sug.linha?.csn.sugMin ?? sug.csn.sugMin}
+              max={sug.linha?.csn.sugMax ?? sug.csn.sugMax}
+              media={sug.linha?.csn.media ?? sug.csn.media}
+              ultima={sug.linha?.csn.ultimaTendencia ?? sug.csn.ultimaTendencia}
+              centralidade={sug.linha?.csn.centralidade ?? sug.csn.centralidade}
+              razao={sug.linha?.csn.razao ?? sug.csn.razao}
+            />
+            <FaixaCard
+              titulo="Coluna SPQ"
+              min={sug.coluna?.spq.sugMin ?? sug.spq.sugMin}
+              max={sug.coluna?.spq.sugMax ?? sug.spq.sugMax}
+              media={sug.coluna?.spq.media ?? sug.spq.media}
+              ultima={sug.coluna?.spq.ultimaTendencia ?? sug.spq.ultimaTendencia}
+              centralidade={sug.coluna?.spq.centralidade ?? sug.spq.centralidade}
+              razao={sug.coluna?.spq.razao ?? sug.spq.razao}
+            />
+            <FaixaCard
+              titulo="Coluna CSN"
+              min={sug.coluna?.csn.sugMin ?? sug.csn.sugMin}
+              max={sug.coluna?.csn.sugMax ?? sug.csn.sugMax}
+              media={sug.coluna?.csn.media ?? sug.csn.media}
+              ultima={sug.coluna?.csn.ultimaTendencia ?? sug.csn.ultimaTendencia}
+              centralidade={sug.coluna?.csn.centralidade ?? sug.csn.centralidade}
+              razao={sug.coluna?.csn.razao ?? sug.csn.razao}
             />
             <FaixaCard
               titulo="Soma"
@@ -487,89 +479,15 @@ export default function IA() {
                   </div>
                 </div>
 
-                <label className="block text-xs font-bold uppercase tracking-wider text-[#5C7080] mb-2">
-                  Estratégia de seleção
-                </label>
-                <div className="flex flex-wrap gap-2 mb-4">
-                  {([
-                    { v: "equilibrado", label: "⚖️ Equilibrado", desc: "Mistura quentes + atrasadas + aleatório" },
-                    { v: "quentes",     label: "🔥 Quentes",     desc: "Prioriza dezenas que mais saíram" },
-                    { v: "atrasadas",   label: "❄️ Atrasadas",   desc: "Prioriza dezenas há tempo sem sair" },
-                    { v: "diverso",     label: "🎲 Diverso",     desc: "Maximiza variedade entre fichas" },
-                  ] as const).map((m) => (
-                    <button
-                      key={m.v}
-                      onClick={() => setModoSelecao(m.v)}
-                      title={m.desc}
-                      className={cn(
-                        "px-4 py-2 rounded-xl text-sm font-bold transition-all",
-                        modoSelecao === m.v
-                          ? "bg-gradient-to-br from-cyan-500 to-cyan-700 text-white shadow-md shadow-cyan-200"
-                          : "bg-white border border-[#DDE8EC] hover:border-cyan-300"
-                      )}
-                    >
-                      {m.label}
-                    </button>
-                  ))}
-                </div>
-
-                <label className="block text-xs font-bold uppercase tracking-wider text-[#5C7080] mb-2">
-                  Quantas fichas você quer?
-                </label>
-                <div className="flex flex-wrap gap-2 mb-3">
-                  {[5, 10, 15, 20, 25, 50].map((n) => (
-                    <button
-                      key={n}
-                      onClick={() => setFichasFinal(Math.min(n, jogosCompletos.length))}
-                      className={cn(
-                        "px-4 py-2 rounded-xl text-sm font-bold transition-all",
-                        fichasFinal === n
-                          ? "bg-gradient-to-br from-cyan-500 to-cyan-700 text-white shadow-md shadow-cyan-200"
-                          : "bg-white border border-[#DDE8EC] hover:border-cyan-300"
-                      )}
-                    >
-                      {n} fichas
-                    </button>
-                  ))}
-                  <input
-                    type="number"
-                    min={1}
-                    max={jogosCompletos.length}
-                    value={fichasFinal}
-                    onChange={(e) => setFichasFinal(
-                      Math.max(1, Math.min(jogosCompletos.length, parseInt(e.target.value) || 1))
-                    )}
-                    className="bg-cyan-50 border border-cyan-100 rounded-xl px-3 py-2 text-sm font-semibold w-24 text-center focus:outline-none focus:ring-2 focus:ring-cyan-300"
-                  />
-                </div>
-                <div className="bg-cyan-50/50 border border-cyan-100 rounded-xl px-4 py-3 mb-4 text-[12px] text-[#1A2A3A] leading-relaxed">
-                  <div className="font-bold text-cyan-800 mb-1">
-                    {fichasSelecionadas.length} fichas de {jogosCompletos.length.toLocaleString("pt-BR")} possíveis
+                <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 mb-4 text-[12px] text-[#1A2A3A] leading-relaxed">
+                  <div className="flex items-center gap-2 font-extrabold text-emerald-800 mb-1">
+                    <ShieldCheck size={15} />
+                    {fichasSelecionadas.length} melhores fichas finais
                   </div>
-                  {modoSelecao === "equilibrado" && (
-                    <>
-                      🔄 <strong>Equilibrado:</strong> 40% top quentes + 40% top atrasadas + 20% aleatório.
-                      <span className="text-[#5C7080]"> Mistura cobertura e variedade — recomendado para uso geral.</span>
-                    </>
-                  )}
-                  {modoSelecao === "quentes" && (
-                    <>
-                      🔥 <strong>Quentes:</strong> top fichas com maior soma de dezenas que mais saíram nos últimos {retros}.
-                      <span className="text-[#5C7080]"> Tendência: dezenas em sequência costumam concentrar.</span>
-                    </>
-                  )}
-                  {modoSelecao === "atrasadas" && (
-                    <>
-                      ❄️ <strong>Atrasadas:</strong> top fichas com maior soma de atrasos das dezenas presentes.
-                      <span className="text-[#5C7080]"> Aposta na regressão à média — &quot;dezenas devem voltar&quot;.</span>
-                    </>
-                  )}
-                  {modoSelecao === "diverso" && (
-                    <>
-                      🎲 <strong>Diverso:</strong> algoritmo greedy de máxima diversidade (Hamming).
-                      <span className="text-[#5C7080]"> Cada nova ficha é a mais diferente possível das já escolhidas — máxima cobertura.</span>
-                    </>
-                  )}
+                  A seleção é automática: o sistema ranqueia todos os jogos possíveis por encaixe em Linha/SPQ, Linha/CSN,
+                  Coluna/SPQ, Coluna/CSN e Soma, pondera dezenas quentes e atrasadas, aplica filtros clássicos
+                  (pares, bordas, modais, primos, Fibonacci e repetição do último) e escolhe uma carteira final com diversidade
+                  entre fichas.
                 </div>
 
                 {/* Legenda */}
@@ -590,38 +508,61 @@ export default function IA() {
 
                 {/* Lista das fichas selecionadas */}
                 <div className="bg-[#FBFDFE] border border-[#DDE8EC] rounded-xl max-h-[420px] overflow-y-auto scrollbar-thin">
-                  {fichasSelecionadas.map((j, i) => (
-                    <div
-                      key={i}
-                      className={cn(
-                        "px-5 py-3 border-b border-[#F2F6F8] last:border-0",
-                        i % 2 === 1 && "bg-white"
-                      )}
-                    >
-                      <div className="flex items-center gap-3">
-                        <span className="text-[10px] font-bold text-[#5C7080] uppercase tracking-wider w-10">
-                          #{(i + 1).toString().padStart(2, "0")}
-                        </span>
-                        <div className="flex flex-wrap gap-1.5 flex-1">
-                          {j.map((d) => (
-                            <span
-                              key={d}
-                              className={cn(
-                                "inline-flex w-8 h-8 items-center justify-center rounded-lg text-xs font-extrabold tabular-nums",
-                                sug.dezenasQuentes.find((q) => q.dezena === d)
-                                  ? "bg-gradient-to-br from-orange-400 to-orange-600 text-white shadow-sm"
-                                  : sug.dezenasAtrasadas.find((q) => q.dezena === d)
-                                  ? "bg-gradient-to-br from-cyan-400 to-cyan-600 text-white shadow-sm"
-                                  : "bg-white border border-[#DDE8EC] text-cyan-700"
-                              )}
-                            >
-                              {d.toString().padStart(2, "0")}
-                            </span>
-                          ))}
+                  {fichasSelecionadas.map((j, i) => {
+                    const quentes = new Set(sug.dezenasQuentes.map((q) => q.dezena));
+                    const atrasadas = new Set(sug.dezenasAtrasadas.map((q) => q.dezena));
+                    const qtdQuentes = j.filter((d) => quentes.has(d)).length;
+                    const qtdAtrasadas = j.filter((d) => atrasadas.has(d)).length;
+                    const fl = formatoLinha(j);
+                    const fc = formatoColuna(j);
+                    const somaJogo = calcVar("Soma", j);
+                    const modas = calcVar("Modas", j);
+                    const pares = calcVar("Pares", j);
+
+                    return (
+                      <div
+                        key={i}
+                        className={cn(
+                          "px-5 py-3 border-b border-[#F2F6F8] last:border-0",
+                          i % 2 === 1 && "bg-white"
+                        )}
+                      >
+                        <div className="flex items-start gap-3">
+                          <span className="text-[10px] font-bold text-[#5C7080] uppercase tracking-wider w-10 pt-2">
+                            #{(i + 1).toString().padStart(2, "0")}
+                          </span>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex flex-wrap gap-1.5">
+                              {j.map((d) => (
+                                <span
+                                  key={d}
+                                  className={cn(
+                                    "inline-flex w-8 h-8 items-center justify-center rounded-lg text-xs font-extrabold tabular-nums",
+                                    quentes.has(d)
+                                      ? "bg-gradient-to-br from-orange-400 to-orange-600 text-white shadow-sm"
+                                      : atrasadas.has(d)
+                                      ? "bg-gradient-to-br from-cyan-400 to-cyan-600 text-white shadow-sm"
+                                      : "bg-white border border-[#DDE8EC] text-cyan-700"
+                                  )}
+                                >
+                                  {d.toString().padStart(2, "0")}
+                                </span>
+                              ))}
+                            </div>
+                            <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10.5px] font-bold text-[#5C7080]">
+                              <span>Linha <code className="font-mono text-cyan-700">{fl}</code></span>
+                              <span>Coluna <code className="font-mono text-cyan-700">{fc}</code></span>
+                              <span>Soma {somaJogo}</span>
+                              <span>Pares {pares}</span>
+                              <span>Modas {modas}</span>
+                              <span>Quentes {qtdQuentes}</span>
+                              <span>Atrasadas {qtdAtrasadas}</span>
+                            </div>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
 
                 <div className="flex flex-wrap gap-3 mt-5">
@@ -629,7 +570,7 @@ export default function IA() {
                     onClick={baixarTxt}
                     className="bg-gradient-to-br from-cyan-500 to-cyan-700 text-white font-extrabold rounded-xl px-6 py-3 text-sm shadow-lg shadow-cyan-200 hover:-translate-y-0.5 transition-all flex items-center gap-2"
                   >
-                    <Download size={16}/> Baixar {fichasFinal} fichas (.txt)
+                    <Download size={16}/> Baixar 5 fichas (.txt)
                   </button>
                   <button
                     onClick={salvarHistorico}
@@ -646,25 +587,13 @@ export default function IA() {
                     {salvando ? <Loader2 className="animate-spin" size={16}/> : <Save size={16}/>}
                     {saveOk !== null ? `✅ Salvo no histórico (#${saveOk})` : salvando ? "Salvando…" : "Salvar no histórico"}
                   </button>
-                  <Link
+                  <a
                     href="/historico"
                     className="bg-white border border-[#DDE8EC] text-[#1A2A3A] font-bold rounded-xl px-6 py-3 text-sm hover:border-cyan-300 transition-all flex items-center gap-2"
                   >
                     Ver histórico
-                  </Link>
+                  </a>
                 </div>
-
-                <details className="mt-5">
-                  <summary className="cursor-pointer text-xs text-[#5C7080] font-semibold hover:text-cyan-700">
-                    Avançado: ajustar parâmetros manualmente no Gerador
-                  </summary>
-                  <button
-                    onClick={aplicar}
-                    className="mt-3 bg-white border border-[#DDE8EC] text-[#1A2A3A] font-bold rounded-xl px-4 py-2 text-xs hover:border-cyan-300 transition-all flex items-center gap-2"
-                  >
-                    Aplicar e ir ao Gerador <ArrowRight size={14}/>
-                  </button>
-                </details>
               </div>
             </>
           )}

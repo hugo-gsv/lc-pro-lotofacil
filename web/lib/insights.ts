@@ -256,8 +256,17 @@ export function analiseMultiJanela(
 //  Sugestão completa (motor de IA)
 // =============================================================================
 export type Sugestao = {
+  // Mantidos por compatibilidade com telas antigas: apontam para as análises de LINHA.
   spq: SerieAnalise;
   csn: SerieAnalise;
+  linha: {
+    spq: SerieAnalise;
+    csn: SerieAnalise;
+  };
+  coluna: {
+    spq: SerieAnalise;
+    csn: SerieAnalise;
+  };
   soma: SerieAnalise;
   topLinhas: FormatoStat[];     // sugeridos para Linhas Inclusas
   topColunas: FormatoStat[];    // sugeridos para Colunas Inclusas
@@ -269,39 +278,50 @@ export type Sugestao = {
 
 export function sugerir(
   historico: { c: number; dez: number[] }[],
-  alvoJogos = 10,
+  alvoJogos = 5,
   pesoTendencia = 0.6
 ): Sugestao {
   if (historico.length === 0) {
     throw new Error("Histórico vazio");
   }
 
-  const seriesSpq = historico.map((r) => spq(formatoLinha(r.dez)));
-  const seriesCsn = historico.map((r) => csn(formatoLinha(r.dez)));
+  const seriesSpqLinha = historico.map((r) => spq(formatoLinha(r.dez)));
+  const seriesCsnLinha = historico.map((r) => csn(formatoLinha(r.dez)));
+  const seriesSpqColuna = historico.map((r) => spq(formatoColuna(r.dez)));
+  const seriesCsnColuna = historico.map((r) => csn(formatoColuna(r.dez)));
   const seriesSoma = historico.map((r) => r.dez.reduce((a, b) => a + b, 0));
 
-  const spqA = analisarSerie(seriesSpq, 45, pesoTendencia);
-  const csnA = analisarSerie(seriesCsn, 320, pesoTendencia);
+  const spqLinhaA = analisarSerie(seriesSpqLinha, 45, pesoTendencia);
+  const csnLinhaA = analisarSerie(seriesCsnLinha, 320, pesoTendencia);
+  const spqColunaA = analisarSerie(seriesSpqColuna, 45, pesoTendencia);
+  const csnColunaA = analisarSerie(seriesCsnColuna, 320, pesoTendencia);
   const somaA = analisarSerie(seriesSoma, 195, pesoTendencia);
 
   const formatosL = analisarFormatos(historico, formatoLinha);
   const formatosC = analisarFormatos(historico, formatoColuna);
 
-  // Top: combina frequência alta + atraso (índice alto = atraso esperado mas
-  // ainda recorrente). Filtra também pelos formatos "centrais"
-  // (33333, 23334 e simétricos com SPQ próximo de 45).
-  const topLinhas = formatosL
-    .filter((f) => {
-      const sp = spq(f.fmt);
-      return sp >= 42 && sp <= 48;
-    })
-    .slice(0, 3);
-  const topColunas = formatosC
-    .filter((f) => {
-      const sp = spq(f.fmt);
-      return sp >= 42 && sp <= 48;
-    })
-    .slice(0, 3);
+  const scoreFormato = (f: FormatoStat, spqRange: SerieAnalise, csnRange: SerieAnalise) => {
+    const sp = spq(f.fmt);
+    const cn = csn(f.fmt);
+    const inSpq = sp >= spqRange.sugMin && sp <= spqRange.sugMax;
+    const inCsn = cn >= csnRange.sugMin && cn <= csnRange.sugMax;
+    const distSpq = Math.abs(sp - 45);
+    const distCsn = Math.abs(cn - 320) / 20;
+    // Índice do app original continua importante, mas não domina sozinho.
+    return f.freq * 12 + f.atraso * 1.4 + f.indice * 0.75 +
+      (inSpq ? 16 : -12) + (inCsn ? 12 : -8) -
+      distSpq * 1.2 - distCsn * 0.6;
+  };
+
+  // A IA precisa gerar 5 fichas; se escolher só 2-3 formatos, pode ficar sem
+  // diversidade suficiente. Por isso pegamos 6 de linha e 6 de coluna: é um
+  // portfólio pequeno, explicável, mas com espaço para o ranking final.
+  const topLinhas = [...formatosL]
+    .sort((a, b) => scoreFormato(b, spqLinhaA, csnLinhaA) - scoreFormato(a, spqLinhaA, csnLinhaA))
+    .slice(0, Math.max(4, Math.min(6, alvoJogos + 1)));
+  const topColunas = [...formatosC]
+    .sort((a, b) => scoreFormato(b, spqColunaA, csnColunaA) - scoreFormato(a, spqColunaA, csnColunaA))
+    .slice(0, Math.max(4, Math.min(6, alvoJogos + 1)));
 
   const variaveis = analisarVariaveis(historico);
   const dezenasAtrasadas = [...variaveis]
@@ -313,19 +333,21 @@ export function sugerir(
 
   const razoesGerais = [
     `Análise sobre ${historico.length} concursos retros.`,
-    spqA.razao,
-    csnA.razao,
+    `Linha/SPQ — ${spqLinhaA.razao}`,
+    `Linha/CSN — ${csnLinhaA.razao}`,
+    `Coluna/SPQ — ${spqColunaA.razao}`,
+    `Coluna/CSN — ${csnColunaA.razao}`,
     somaA.razao,
-    `Centralidade SPQ: ${(spqA.centralidade * 100).toFixed(0)}% — ${
-      spqA.centralidade > 0.7
+    `Centralidade linha/SPQ: ${(spqLinhaA.centralidade * 100).toFixed(0)}% — ${
+      spqLinhaA.centralidade > 0.7
         ? "série puxando para os extremos, esperar reversão"
-        : spqA.centralidade > 0.3
+        : spqLinhaA.centralidade > 0.3
         ? "série moderadamente afastada do centro"
         : "série já no centro, manter intervalo"
     }`,
-    `Top 3 formatos linha (índice freq×atraso): ${topLinhas
+    `Top formatos linha (freq×atraso + centralidade SPQ/CSN): ${topLinhas
       .map((f) => `${f.fmt} (×${f.freq}, atr ${f.atraso})`).join(", ")}`,
-    `Top 3 formatos coluna: ${topColunas
+    `Top formatos coluna: ${topColunas
       .map((f) => `${f.fmt} (×${f.freq}, atr ${f.atraso})`).join(", ")}`,
     `Dezenas mais atrasadas: ${dezenasAtrasadas
       .map((d) => `${d.dezena.toString().padStart(2, "0")}(${d.atraso})`).join(", ")}`,
@@ -339,8 +361,10 @@ export function sugerir(
   const jogosEstimados = topLinhas.length * topColunas.length * 30;
 
   return {
-    spq: spqA,
-    csn: csnA,
+    spq: spqLinhaA,
+    csn: csnLinhaA,
+    linha: { spq: spqLinhaA, csn: csnLinhaA },
+    coluna: { spq: spqColunaA, csn: csnColunaA },
     soma: somaA,
     topLinhas,
     topColunas,
