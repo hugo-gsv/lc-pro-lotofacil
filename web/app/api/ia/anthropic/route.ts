@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
       perfil.pesoTendencia,
       { larguraFaixa: perfil.larguraFaixa, qtdFormatos: perfil.qtdFormatos }
     );
-    const carteira = gerarCarteiraIA(historico, sug, perfil, alvoJogos);
+    const carteira = gerarCarteiraIA(historico, sug, perfil, alvoJogos, historicoLongo);
 
     // 3) Análise multi-janela sobre todo o histórico longo (valida tendência)
     const mj = analiseMultiJanela(historicoLongo, 30);

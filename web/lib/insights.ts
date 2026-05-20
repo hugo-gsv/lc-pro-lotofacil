@@ -497,19 +497,19 @@ export const PERFIS_IA: PerfilIA[] = [
 ];
 
 export const PERFIL_TREINADO_IA: PerfilIA = {
-  id: "offline-atrasadas-r30-t045-l160-f5",
-  nome: "Atrasadas calibrado offline",
-  descricao: "Perfil treinado localmente sobre concursos 3600-3667, sem chamada de IA/API no uso do site.",
-  pesoTendencia: 0.45,
-  larguraFaixa: 1.6,
-  qtdFormatos: 5,
-  pesoFormato: 1,
-  pesoQuente: 0.12,
-  pesoAtraso: 0.55,
-  pesoDiversidade: 3.9,
-  pesoCobertura: 1.5,
-  penalQuentes: 2.2,
-  penalAtrasadas: 1.5,
+  id: "offline-imperfeito-r40-t035-l190-f12",
+  nome: "Probabilidade imperfeita offline",
+  descricao: "Perfil calibrado localmente nos últimos 2000 concursos; usa formatos mais abertos e seletor menos agressivo.",
+  pesoTendencia: 0.35,
+  larguraFaixa: 1.9,
+  qtdFormatos: 12,
+  pesoFormato: 0.35,
+  pesoQuente: 0.06,
+  pesoAtraso: 0.22,
+  pesoDiversidade: 4.1,
+  pesoCobertura: 1.8,
+  penalQuentes: 0.8,
+  penalAtrasadas: 0.8,
 };
 
 export type CarteiraIA = {
@@ -522,7 +522,8 @@ export function gerarCarteiraIA(
   historico: { c: number; dez: number[] }[],
   sug: Sugestao,
   perfil: PerfilIA = PERFIS_IA[0],
-  totalFichas = 5
+  totalFichas = 5,
+  historicoReferencia: { c: number; dez: number[] }[] = historico
 ): CarteiraIA {
   const linhas = sug.topLinhas.map((f) => f.fmt);
   const colunas = sug.topColunas.map((f) => f.fmt);
@@ -555,6 +556,79 @@ export function gerarCarteiraIA(
       ? bonus
       : -Math.min(8, Math.min(Math.abs(value - min), Math.abs(value - max)) * 1.5);
 
+  const bucket = (value: number, size: number) => Math.floor(value / size) * size;
+  const addCount = (counts: Map<string, Map<string, number>>, key: string, value: string | number) => {
+    const val = String(value);
+    if (!counts.has(key)) counts.set(key, new Map());
+    const m = counts.get(key)!;
+    m.set(val, (m.get(val) ?? 0) + 1);
+  };
+  const logProb = (
+    counts: Map<string, Map<string, number>>,
+    total: number,
+    key: string,
+    value: string | number
+  ) => {
+    const m = counts.get(key);
+    const unique = m?.size ?? 0;
+    const count = m?.get(String(value)) ?? 0;
+    return Math.log((count + 1) / (total + unique + 1));
+  };
+
+  const priorKeys = [
+    "spqLinha", "spqColuna", "csnLinhaBucket", "csnColunaBucket", "somaBucket",
+    "pares", "bordas", "modas", "primos", "fibo", "repeticao", "nQuentes", "nAtrasadas",
+  ];
+
+  const features = (
+    j: number[],
+    ultimoSet: Set<number>,
+    quentes: Set<number>,
+    atrasadas: Set<number>
+  ) => {
+    const fl = formatoLinha(j);
+    const fc = formatoColuna(j);
+    const soma = j.reduce((a, b) => a + b, 0);
+    return {
+      fl,
+      fc,
+      spqLinha: spq(fl),
+      spqColuna: spq(fc),
+      csnLinhaBucket: bucket(csn(fl), 50),
+      csnColunaBucket: bucket(csn(fc), 50),
+      soma,
+      somaBucket: bucket(soma, 5),
+      pares: calcVar("Pares", j),
+      bordas: calcVar("Bordas", j),
+      modas: calcVar("Modas", j),
+      primos: calcVar("Primos", j),
+      fibo: calcVar("Fibonacci", j),
+      repeticao: calcVar("Repetição Último", j, ultimoSet),
+      nQuentes: j.filter((d) => quentes.has(d)).length,
+      nAtrasadas: j.filter((d) => atrasadas.has(d)).length,
+    };
+  };
+
+  const montarPrior = () => {
+    const ref = [...historicoReferencia].sort((a, b) => a.c - b.c);
+    const start = Math.max(1, ref.length - 240);
+    const counts = new Map<string, Map<string, number>>();
+    let total = 0;
+    for (let i = start; i < ref.length; i++) {
+      const janela = ref.slice(Math.max(0, i - 40), i);
+      if (janela.length < 10) continue;
+      const vars = analisarVariaveis(janela.map((r) => ({ c: r.c, dez: r.dez })));
+      const q = new Set([...vars].sort((a, b) => b.freq - a.freq).slice(0, 8).map((d) => d.dezena));
+      const a = new Set([...vars].sort((x, y) => y.atraso - x.atraso).slice(0, 5).map((d) => d.dezena));
+      const f = features(ref[i].dez, new Set(janela[janela.length - 1].dez), q, a);
+      for (const key of priorKeys) addCount(counts, key, f[key as keyof typeof f] as string | number);
+      total++;
+    }
+    return { counts, total };
+  };
+
+  const prior = perfil.id.includes("imperfeito") ? montarPrior() : null;
+
   const scoreBase = (j: number[]) => {
     const fl = formatoLinha(j);
     const fc = formatoColuna(j);
@@ -577,18 +651,44 @@ export function gerarCarteiraIA(
       inRangeBonus(spq(fc), sug.coluna.spq.sugMin, sug.coluna.spq.sugMax, 10) +
       inRangeBonus(csn(fc), sug.coluna.csn.sugMin, sug.coluna.csn.sugMax, 8) +
       inRangeBonus(soma, sug.soma.sugMin, sug.soma.sugMax, 12) +
-      bandBonus(pares, 7, 8, 7) +
-      bandBonus(bordas, 9, 11, 6) +
-      bandBonus(modas, 8, 9, 6) +
-      bandBonus(primos, 5, 7, 4) +
-      bandBonus(fib, 3, 5, 4) +
-      bandBonus(rep, 7, 10, 5) +
+      bandBonus(pares, perfil.id.includes("imperfeito") ? 6 : 7, perfil.id.includes("imperfeito") ? 9 : 8, 7) +
+      bandBonus(bordas, perfil.id.includes("imperfeito") ? 8 : 9, perfil.id.includes("imperfeito") ? 12 : 11, 6) +
+      bandBonus(modas, 8, perfil.id.includes("imperfeito") ? 11 : 9, 6) +
+      bandBonus(primos, perfil.id.includes("imperfeito") ? 4 : 5, perfil.id.includes("imperfeito") ? 8 : 7, 4) +
+      bandBonus(fib, 3, perfil.id.includes("imperfeito") ? 6 : 5, 4) +
+      bandBonus(rep, perfil.id.includes("imperfeito") ? 6 : 7, perfil.id.includes("imperfeito") ? 11 : 10, 5) +
       hot * perfil.pesoQuente +
       atraso * perfil.pesoAtraso -
       Math.max(0, nHot - 8) * perfil.penalQuentes -
       Math.max(0, nAtr - 5) * perfil.penalAtrasadas -
       Math.abs(soma - 195) * 0.12
     );
+  };
+
+  const scoreProbabilistico = (j: number[], estrategia: "base" | "baixo-calor" | "modal" | "formato-fraco" | "borda") => {
+    if (!prior || prior.total < 20) return scoreBase(j);
+    const f = features(
+      j,
+      ultimo,
+      new Set(sug.dezenasQuentes.map((d) => d.dezena)),
+      new Set(sug.dezenasAtrasadas.map((d) => d.dezena))
+    );
+    let score = 0;
+    for (const key of priorKeys) {
+      score += logProb(prior.counts, prior.total, key, f[key as keyof typeof f] as string | number);
+    }
+    const linhaRank = Math.max(1, sug.topLinhas.findIndex((x) => x.fmt === f.fl) + 1);
+    const colunaRank = Math.max(1, sug.topColunas.findIndex((x) => x.fmt === f.fc) + 1);
+    const formatoPenalty =
+      estrategia === "formato-fraco" ? -0.22 :
+      estrategia === "base" ? 0.12 :
+      0.06;
+    score -= Math.log(linhaRank + colunaRank) * formatoPenalty;
+    score -= Math.abs(f.soma - 195) * 0.006;
+    if (estrategia === "baixo-calor") score -= Math.max(0, f.nQuentes - 6) * 0.65;
+    if (estrategia === "modal" && f.modas >= 10 && f.modas <= 11) score += 3.2;
+    if (estrategia === "borda" && (f.bordas === 8 || f.bordas === 12)) score += 2.6;
+    return score;
   };
 
   const hamming = (a: number[], b: number[]) => {
@@ -604,6 +704,34 @@ export function gerarCarteiraIA(
     .slice(0, Math.min(2500, jogosCompletos.length));
 
   const N = Math.max(1, Math.min(totalFichas, ranked.length));
+  if (perfil.id.includes("imperfeito") && prior && prior.total >= 20) {
+    const estrategias: Array<"base" | "baixo-calor" | "modal" | "formato-fraco" | "borda"> = [
+      "base", "baixo-calor", "modal", "formato-fraco", "borda",
+    ];
+    const baseCandidatos = [...jogosCompletos]
+      .map((j) => ({ j, s: scoreBase(j) }))
+      .sort((a, b) => b.s - a.s)
+      .slice(0, Math.min(60000, jogosCompletos.length));
+    const outProb: number[][] = [];
+    const used = new Set<string>();
+    for (const estrategia of estrategias) {
+      let best: { j: number[]; score: number } | null = null;
+      for (const item of baseCandidatos) {
+        const key = item.j.join(",");
+        if (used.has(key)) continue;
+        const minDist = outProb.length ? Math.min(...outProb.map((o) => hamming(item.j, o))) : 15;
+        const diversity = outProb.length ? Math.min(1.2, minDist * 0.08) : 0;
+        const score = scoreProbabilistico(item.j, estrategia) + diversity;
+        if (!best || score > best.score) best = { j: item.j, score };
+      }
+      if (!best) break;
+      outProb.push(best.j);
+      used.add(best.j.join(","));
+      if (outProb.length >= N) break;
+    }
+    return { jogos: outProb, totalGerado: jogosCompletos.length, perfil };
+  }
+
   const out: number[][] = [ranked[0].j];
   const taken = new Set([ranked[0].j.join(",")]);
 
@@ -665,35 +793,35 @@ export type TreinamentoIA = {
 };
 
 export const TREINAMENTO_OFFLINE_IA: TreinamentoIA = {
-  retros: 30,
-  simulacoes: 68,
-  concursoInicio: 3600,
+  retros: 40,
+  simulacoes: 2000,
+  concursoInicio: 1668,
   concursoFim: 3667,
   perfilVencedor: PERFIL_TREINADO_IA,
   ranking: [
     {
       perfil: PERFIL_TREINADO_IA,
-      simulacoes: 68,
-      mediaMelhorAcerto: 10.309,
+      simulacoes: 2000,
+      mediaMelhorAcerto: 10.345,
       maxAcerto: 13,
-      taxa10Mais: 0.8088,
-      taxa11Mais: 0.4118,
-      taxa12Mais: 0.0588,
-      taxa13Mais: 0.0294,
+      taxa10Mais: 0.848,
+      taxa11Mais: 0.4155,
+      taxa12Mais: 0.0835,
+      taxa13Mais: 0.008,
       taxa14Mais: 0,
       taxa15: 0,
-      coberturaLinha: 0.0441,
-      coberturaColuna: 0.1618,
-      coberturaSoma: 0.8824,
-      coberturaLinhaColuna: 0.0294,
-      score: 1091.235,
+      coberturaLinha: 0.102,
+      coberturaColuna: 0.101,
+      coberturaSoma: 0.9375,
+      coberturaLinhaColuna: 0.0135,
+      score: 1106.86,
     },
   ],
   exemplos: [],
   conclusao:
-    "A metodologia foi calibrada localmente, fora do site, usando concursos 3600 a 3667 em modo walk-forward. " +
-    "No teste com 5 fichas finais, o melhor perfil chegou a pico de 13 pontos e média de 10,31; não foi encontrada metodologia que acertasse 15 pontos nas 5 fichas nesse período. " +
-    "Por isso o site não treina a cada clique: ele apenas aplica o perfil offline mais consistente encontrado.",
+    "A metodologia foi recalibrada localmente, fora do site, usando os últimos 2000 concursos em modo walk-forward. " +
+    "A análise mostrou que a restrição por formato era agressiva demais; por isso o perfil atual usa 12 formatos, faixa mais aberta e seleção probabilística imperfeita. " +
+    "No teste com 5 fichas finais, o perfil chegou a pico de 13 pontos e média de 10,35; não foi encontrada metodologia que acertasse 15 pontos nas 5 fichas nesse período.",
 };
 
 function hitCount(jogo: number[], resultado: Set<number>) {

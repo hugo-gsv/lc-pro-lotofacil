@@ -14,7 +14,7 @@ const FICHAS_FIXAS = 5;
 
 export default function IA() {
   const [conc, setConc] = useState(3674);
-  const [retros, setRetros] = useState(30);
+  const [retros, setRetros] = useState(40);
 
   const [hist, setHist] = useState<{ c: number; dez: number[] }[]>([]);
   const [histLongo, setHistLongo] = useState<{ c: number; dez: number[] }[]>([]);

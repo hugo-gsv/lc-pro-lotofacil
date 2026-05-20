@@ -7,6 +7,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const historico: { c: number; dez: number[] }[] = body.historico ?? [];
+    const historicoLongo: { c: number; dez: number[] }[] = body.historicoLongo ?? historico;
     const alvoJogos = 5;
 
     if (!Array.isArray(historico) || historico.length === 0) {
@@ -22,7 +23,7 @@ export async function POST(req: NextRequest) {
       perfil.pesoTendencia,
       { larguraFaixa: perfil.larguraFaixa, qtdFormatos: perfil.qtdFormatos }
     );
-    const carteira = gerarCarteiraIA(historico, sug, perfil, alvoJogos);
+    const carteira = gerarCarteiraIA(historico, sug, perfil, alvoJogos, historicoLongo);
 
     return NextResponse.json({
       sugestao: sug,
