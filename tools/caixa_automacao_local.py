@@ -24,6 +24,7 @@ import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from typing import Any
 
 CAIXA_HOME = "https://www.loteriasonline.caixa.gov.br/silce-web/#/home"
@@ -50,6 +51,29 @@ except ImportError:
     TimeoutException = Exception  # type: ignore[misc,assignment]
     ElementClickInterceptedException = Exception  # type: ignore[misc,assignment]
     StaleElementReferenceException = Exception  # type: ignore[misc,assignment]
+
+
+def carregar_env_local() -> None:
+    candidatos = [
+        Path.cwd() / ".env.caixa",
+        Path(__file__).resolve().parents[1] / ".env.caixa",
+    ]
+    carregados: set[Path] = set()
+    for path in candidatos:
+        path = path.resolve()
+        if path in carregados or not path.exists():
+            continue
+        carregados.add(path)
+        for raw in path.read_text(encoding="utf-8").splitlines():
+            linha = raw.strip()
+            if not linha or linha.startswith("#") or "=" not in linha:
+                continue
+            chave, valor = linha.split("=", 1)
+            chave = chave.strip()
+            valor = valor.strip().strip('"').strip("'")
+            if chave and chave not in os.environ:
+                os.environ[chave] = valor
+        print(f"Configuração local carregada: {path}")
 
 
 def http_json(method: str, url: str, payload: dict[str, Any] | None = None) -> Any:
@@ -173,12 +197,20 @@ def buscar_codigo_email() -> str | None:
 
 def obter_codigo_validacao() -> str:
     print("Aguardando o código de validação da Caixa...")
+    ultimo_erro: Exception | None = None
     for _ in range(10):
-        codigo = buscar_codigo_email()
+        try:
+            codigo = buscar_codigo_email()
+        except Exception as exc:
+            ultimo_erro = exc
+            print(f"Não consegui ler o e-mail automaticamente: {exc}")
+            break
         if codigo:
             print("Código recebido por e-mail.")
             return codigo
         time.sleep(5)
+    if ultimo_erro:
+        print("Vou pedir o código manualmente para não travar a automação.")
     return input("Digite o código recebido por e-mail/SMS: ").strip()
 
 
@@ -424,6 +456,8 @@ def iniciar_bridge(args: argparse.Namespace) -> None:
 
 
 def main() -> int:
+    carregar_env_local()
+
     parser = argparse.ArgumentParser(description="Assistente local LC Pro -> Caixa")
     parser.add_argument("--base-url", default=os.environ.get("LC_PRO_URL", "https://lc-pro-lotofacil.vercel.app"))
     parser.add_argument("--job-id", type=int, help="Processa um job específico")

@@ -5,6 +5,7 @@ __pycache__/
 .venv-*/
 venv/
 .env
+.env.caixa
 .DS_Store
 *.swp
 .streamlit/secrets.toml

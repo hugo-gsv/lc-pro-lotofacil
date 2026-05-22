@@ -26,14 +26,32 @@ export CHROMEDRIVER_PATH="/Users/mac/Documents/Claude/Projects/Apps loteria/Loto
 
 ## Rodar como ponte local
 
+Crie um arquivo local `.env.caixa` na raiz do projeto. Ele não vai para o Git:
+
 ```bash
-export LC_PRO_URL="https://lc-pro-lotofacil.vercel.app"
-export CAIXA_CPF="SEU_CPF"
-export CAIXA_SENHA="SUA_SENHA"
+cp .env.caixa.example .env.caixa
+```
+
+Preencha:
+
+```bash
+LC_PRO_URL=https://lc-pro-lotofacil.vercel.app
+CAIXA_CPF=SEU_CPF
+CAIXA_SENHA=SUA_SENHA
+GMAIL_IMAP_EMAIL=seu-email@gmail.com
+GMAIL_IMAP_APP_PASSWORD=sua-senha-de-app
+GMAIL_IMAP_FROM=logincaixa@caixa.gov.br
+GMAIL_IMAP_SUBJECT=Código de Validação
+GMAIL_IMAP_LOOKBACK_MINUTES=10
+```
+
+Depois rode:
+
+```bash
 python3 tools/caixa_automacao_local.py --bridge --keep-open
 ```
 
-Se não definir `CAIXA_CPF` ou `CAIXA_SENHA`, o assistente pergunta no terminal.
+Se algum campo não estiver no `.env.caixa`, o assistente pergunta no terminal.
 
 ## Rodar aguardando fila online
 
@@ -46,12 +64,7 @@ python3 tools/caixa_automacao_local.py --watch --keep-open
 
 ## Código de validação
 
-Por padrão, o assistente pergunta o código recebido por e-mail/SMS. Se quiser ler o Gmail localmente via IMAP, configure uma senha de app:
-
-```bash
-export GMAIL_IMAP_EMAIL="seu-email@gmail.com"
-export GMAIL_IMAP_APP_PASSWORD="senha-de-app"
-```
+Com `GMAIL_IMAP_EMAIL` e `GMAIL_IMAP_APP_PASSWORD` preenchidos, o assistente lê o código do Gmail automaticamente, igual ao programa antigo. Se não conseguir ler o e-mail, ele pede o código manualmente para não travar.
 
 Esses dados ficam somente no Mac. Não coloque CPF, senha da Caixa, senha de e-mail ou código de validação no site ou no repositório.
 
