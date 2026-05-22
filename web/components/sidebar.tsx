@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Sparkles, Filter, Check, Archive, Menu, BarChart3, Activity, Brain } from "lucide-react";
+import { Home, Sparkles, Filter, Check, Archive, Menu, BarChart3, Activity, Brain, ShoppingCart } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 
@@ -14,6 +14,7 @@ const NAV = [
   { href: "/conferidor", label: "Conferidor", icon: Check },
   { href: "/estatisticas-formato", label: "Est. Formato", icon: BarChart3 },
   { href: "/estatisticas-variaveis", label: "Est. Variáveis", icon: Activity },
+  { href: "/automacao", label: "Automação Caixa", icon: ShoppingCart },
   { href: "/historico", label: "Histórico", icon: Archive },
 ];
 

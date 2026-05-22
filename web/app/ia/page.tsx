@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Brain, Loader2, Wand2, TrendingUp, Flame, Snowflake, Sparkle, Download, Save, Dices, ShieldCheck } from "lucide-react";
+import { Brain, Loader2, Wand2, TrendingUp, Flame, Snowflake, Sparkle, Download, Save, Dices, ShieldCheck, ShoppingCart, RadioTower } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionTitle } from "@/components/ui/section-title";
 import {
@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import type { Sugestao, TreinamentoIA } from "@/lib/insights";
 
 const FICHAS_FIXAS = 5;
+const LOCAL_BRIDGE_URL = "http://127.0.0.1:8725";
 
 export default function IA() {
   const [conc, setConc] = useState(3674);
@@ -39,6 +40,9 @@ export default function IA() {
   const [totalGeradoIA, setTotalGeradoIA] = useState<number | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [saveOk, setSaveOk] = useState<number | null>(null);
+  const [autoLoading, setAutoLoading] = useState(false);
+  const [autoJob, setAutoJob] = useState<{ id: number | string; status: string } | null>(null);
+  const [autoMsg, setAutoMsg] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("https://servicebus2.caixa.gov.br/portaldeloterias/api/lotofacil",
@@ -87,6 +91,9 @@ export default function IA() {
     setMultiJ(null);
     setFichasIA([]);
     setTotalGeradoIA(null);
+    setSaveOk(null);
+    setAutoJob(null);
+    setAutoMsg(null);
     try {
       const endpoint = usarLLM ? "/api/ia/anthropic" : "/api/ia/sugestao";
       const r = await fetch(endpoint, {
@@ -278,6 +285,59 @@ export default function IA() {
       console.error(e);
     } finally {
       setSalvando(false);
+    }
+  };
+
+  const enviarAutomacaoCaixa = async () => {
+    if (fichasSelecionadas.length === 0) return;
+    setAutoLoading(true);
+    setAutoJob(null);
+    setAutoMsg(null);
+    const payload = {
+      nome: `${conc}A-IA-caixa`,
+      params: {
+        origem: "IA Assistant",
+        concurso_alvo: conc,
+        retros,
+        historico_id: saveOk,
+        n_total_gerado: totalJogosPossiveis,
+        n_fichas_finais: FICHAS_FIXAS,
+        perfil_ia: treinamento?.perfilVencedor.nome ?? "offline",
+        criterio: "Preenchimento no site da Caixa",
+      },
+      jogos: fichasSelecionadas,
+    };
+
+    try {
+      try {
+        const local = await fetch(`${LOCAL_BRIDGE_URL}/jobs`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const localData = await local.json().catch(() => ({}));
+        if (local.ok) {
+          setAutoJob({ id: localData.id ?? "local", status: localData.status ?? "rodando" });
+          setAutoMsg("Assistente local recebeu as fichas e iniciou a inserção no navegador.");
+          return;
+        }
+      } catch {
+        // Sem assistente local aberto: cai para a fila online.
+      }
+
+      const r = await fetch("/api/automacao/jobs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error ?? "erro");
+      setAutoJob({ id: data.id, status: data.status ?? "pendente" });
+      setAutoMsg("Fila online criada. Se o assistente local estiver em modo watch, ele inicia a inserção automaticamente.");
+    } catch (e) {
+      setAutoMsg("Não localizei o assistente local e a fila online não respondeu. Abra o assistente local e tente de novo.");
+    } finally {
+      setAutoLoading(false);
     }
   };
 
@@ -663,13 +723,44 @@ export default function IA() {
                     {salvando ? <Loader2 className="animate-spin" size={16}/> : <Save size={16}/>}
                     {saveOk !== null ? `✅ Salvo no histórico (#${saveOk})` : salvando ? "Salvando…" : "Salvar no histórico"}
                   </button>
+                  <button
+                    onClick={enviarAutomacaoCaixa}
+                    disabled={autoLoading || fichasSelecionadas.length === 0}
+                    className={cn(
+                      "rounded-xl px-6 py-3 text-sm font-extrabold transition-all flex items-center gap-2",
+                      autoLoading
+                        ? "bg-[#F4F8FA] text-[#9DABB5] cursor-wait"
+                        : "bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-lg shadow-emerald-200 hover:-translate-y-0.5"
+                    )}
+                  >
+                    {autoLoading ? <Loader2 className="animate-spin" size={16}/> : <ShoppingCart size={16}/>}
+                    {autoLoading ? "Enviando…" : "Automatizar na Caixa"}
+                  </button>
                   <a
                     href="/historico"
                     className="bg-white border border-[#DDE8EC] text-[#1A2A3A] font-bold rounded-xl px-6 py-3 text-sm hover:border-cyan-300 transition-all flex items-center gap-2"
                   >
                     Ver histórico
                   </a>
+                  <a
+                    href="/automacao"
+                    className="bg-white border border-[#DDE8EC] text-[#1A2A3A] font-bold rounded-xl px-6 py-3 text-sm hover:border-cyan-300 transition-all flex items-center gap-2"
+                  >
+                    <RadioTower size={16}/> Fila
+                  </a>
                 </div>
+
+                {autoMsg && (
+                  <div className={cn(
+                    "mt-4 rounded-xl border px-4 py-3 text-[12px] leading-relaxed",
+                    autoJob
+                      ? "bg-emerald-50 border-emerald-200 text-emerald-900"
+                      : "bg-red-50 border-red-200 text-red-800"
+                  )}>
+                    {autoJob && <strong>Job #{autoJob.id}: </strong>}
+                    {autoMsg}
+                  </div>
+                )}
               </div>
             </>
           )}
